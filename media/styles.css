@@ -131,10 +131,13 @@ body {
 
 /* ── Terminal area ───────────────────────────────────────────────────────── */
 .terminal-area   { flex:1; overflow:hidden; position:relative; }
-.terminal-wrapper { width:100%; height:100%; padding:6px; }
-.terminal-wrapper .xterm { height:100%; }
-.terminal-wrapper .xterm-viewport { overflow-y: auto !important; }
+.terminal-wrapper { width:100%; height:100%; padding:6px; box-sizing:border-box; }
+/* Let xterm fill the padded wrapper exactly, scrollbar stays inside */
+.terminal-wrapper .xterm { height:100%; width:100%; }
 .terminal-wrapper .xterm-screen   { position:relative; z-index:2; }
+/* Let pointer events pass through xterm-screen to the scrollbar in xterm-viewport */
+.terminal-wrapper .xterm-screen   { pointer-events: none; }
+.terminal-wrapper .xterm-screen canvas { pointer-events: auto; }
 
 /* ── Right panels ────────────────────────────────────────────────────────── */
 .history-sidebar, .settings-panel, .alias-panel {

@@ -138,6 +138,13 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
 
     view.webview.html = this.buildHtml(view.webview, mediaUri);
 
+    // When the panel tab becomes visible again, tell the webview to scroll to bottom
+    view.onDidChangeVisibility(() => {
+      if (view.visible) {
+        view.webview.postMessage({ type: 'hostCommand', cmd: 'scrollToBottom' });
+      }
+    });
+
     // Handle messages from the webview
     view.webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === 'openExternal') {
@@ -260,6 +267,10 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
         <div class="setting-group">
           <label>Saturation: <span id="saturation-value">100</span>%</label>
           <input type="range" id="saturation" min="0" max="200" value="100">
+        </div>
+        <div class="setting-group">
+          <label>Panel contrast: <span id="contrast-value">0</span></label>
+          <input type="range" id="panel-contrast" min="-50" max="50" value="0">
         </div>
         <div class="setting-group">
           <label><input type="checkbox" id="show-input-box"> Bottom input box</label>

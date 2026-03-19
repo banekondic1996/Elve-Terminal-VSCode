@@ -149,6 +149,7 @@
     showInputBox: false,
     neverCollapseSidebar: false,
     ctrlVPaste: false,
+    panelContrast: 0,  // -50 = darker, +50 = lighter
   };
   try {
     const saved = JSON.parse(localStorage.getItem('elveSettings') || '{}');
@@ -271,6 +272,8 @@
     lbl('brightness-value', settings.brightness);
     lbl('opacity-value', settings.bgOpacity);
     lbl('saturation-value', settings.saturation);
+    lbl('contrast-value', settings.panelContrast);
+    set('panel-contrast', settings.panelContrast);
   }
 
   function saveSettings() {
@@ -295,11 +298,32 @@
       document.documentElement.style.setProperty('--ui-fg',     'var(--vscode-foreground, #c9d1d9)');
       document.documentElement.style.setProperty('--ui-accent', 'var(--vscode-button-background, #58a6ff)');
     } else {
-      document.documentElement.style.setProperty('--ui-bg',     '#161b22');
-      document.documentElement.style.setProperty('--ui-bg2',    '#0d1117');
-      document.documentElement.style.setProperty('--ui-border', '#21262d');
-      document.documentElement.style.setProperty('--ui-fg',     '#c9d1d9');
-      document.documentElement.style.setProperty('--ui-accent', '#58a6ff');
+      // Derive UI chrome from the active theme's own colours so
+      // Dracula, Monokai, Nord etc all theme the panel chrome properly.
+      const themeBg  = adjustColor(base.background, settings.colorHue, settings.brightness, settings.saturation);
+      const themeFg  = base.foreground || '#c9d1d9';
+      const themeAcc = base.blue || base.cyan || '#58a6ff';
+      // bg2 = slightly darker than bg; bg = slightly lighter; border = mid
+      const darken  = (hex, pct) => adjustColor(hex, 0, pct, 100);
+      const uiBg2   = darken(themeBg, Math.max(40, settings.brightness - 15));
+      const uiBg    = darken(themeBg, Math.max(50, settings.brightness - 5));
+      const uiBorder= darken(themeBg, Math.max(55, settings.brightness + 5));
+      document.documentElement.style.setProperty('--ui-bg',     uiBg);
+      document.documentElement.style.setProperty('--ui-bg2',    uiBg2);
+      document.documentElement.style.setProperty('--ui-border', uiBorder);
+      document.documentElement.style.setProperty('--ui-fg',     themeFg);
+      document.documentElement.style.setProperty('--ui-accent', themeAcc);
+    }
+
+    // Panel contrast — shift UI chrome brightness after theme colours are set
+    if (settings.panelContrast !== 0) {
+      const shift = settings.panelContrast;
+      const adjustVar = (v) => {
+        const cur = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+        if (cur && cur.startsWith('#'))
+          document.documentElement.style.setProperty(v, adjustColor(cur, 0, 100 + shift, 100));
+      };
+      adjustVar('--ui-bg'); adjustVar('--ui-bg2'); adjustVar('--ui-border');
     }
 
     const termTheme = buildTermTheme();
@@ -317,11 +341,13 @@
 
   function buildTermTheme() {
     const base = settings.theme === 'vscode' ? getVscodeTheme() : (THEMES[settings.theme] || THEMES['github-dark']);
-    const { colorHue: hue, brightness, saturation } = settings;
+    const { colorHue: hue, brightness, saturation, panelContrast } = settings;
+    // panelContrast shifts the terminal background brightness (negative = darker, positive = lighter)
+    const bgBrightness = Math.max(10, Math.min(200, brightness + (panelContrast || 0)));
     const theme = {};
     Object.keys(base).forEach(k => {
       theme[k] = k === 'background'
-        ? adjustColor(base[k], hue, brightness, saturation)
+        ? adjustColor(base[k], hue, bgBrightness, saturation)
         : adjustColor(base[k], hue, brightness, 100);
     });
     theme.cursorAccent = theme.background;
@@ -342,6 +368,7 @@
       theme: buildTermTheme(),
       allowTransparency: settings.bgOpacity < 100,
       scrollback: 10000,
+      scrollOnWrite: true,
     });
     const fa = new FitAddon.FitAddon();
     term.loadAddon(fa);
@@ -537,7 +564,10 @@
     window.addEventListener('resize', tab.onResize);
     if (showHistory) conn.send({ type: 'getHistory', cwd: tab.cwd });
 
-    setTimeout(() => { fitTab(tab); focusTab(tab); }, 60);
+    setTimeout(() => {
+      focusTab(tab);
+      fitTab(tab);
+    }, 60);
   }
 
   // ── Split panes ────────────────────────────────────────────────────────────
@@ -924,6 +954,13 @@
       }
       case 'clearLine':  sendToActive('\x15'); break;
       case 'kill':       sendToActive('\x03'); break;
+      case 'scrollToBottom': {
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (!tab) break;
+        const terms = tab.splits.length ? tab.splits.map(s => s.term) : [tab.term];
+        terms.forEach(t => { try { t.scrollToBottom(); } catch(e){} });
+        break;
+      }
 
       // ── webview/context menu actions ────────────────────────────────────
       case 'ctx.copy': {
@@ -1095,7 +1132,8 @@
   watchRange('color-hue',  'hue-value',        v => settings.colorHue   = parseInt(v));
   watchRange('brightness', 'brightness-value', v => settings.brightness = parseInt(v));
   watchRange('bg-opacity', 'opacity-value',    v => settings.bgOpacity  = parseInt(v));
-  watchRange('saturation', 'saturation-value', v => settings.saturation = parseInt(v));
+  watchRange('saturation',     'saturation-value', v => settings.saturation    = parseInt(v));
+  watchRange('panel-contrast', 'contrast-value',   v => settings.panelContrast = parseInt(v));
   $('font-family').addEventListener('change', e => { settings.fontFamily = e.target.value; saveSettings(); applyTheme(); });
   $('theme').addEventListener('change', e => { settings.theme = e.target.value; saveSettings(); applyTheme(); });
   $('show-input-box').addEventListener('change', e => {
