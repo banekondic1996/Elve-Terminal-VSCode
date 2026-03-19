@@ -764,11 +764,37 @@
     commandHistory.forEach(cmd => {
       const el = document.createElement('div');
       el.className = 'history-item';
-      el.textContent = cmd;
       el.dataset.command = cmd;
       el.dataset.vscodeContext = JSON.stringify({ webviewSection: 'historyItem', preventDefaultContextMenuItems: true });
+
+      const label = document.createElement('span');
+      label.className = 'history-item-label';
+      label.textContent = cmd;
+
+      const del = document.createElement('button');
+      del.className = 'history-item-del';
+      del.title = 'Delete from history';
+      del.textContent = '×';
+      del.addEventListener('click', e => {
+        e.stopPropagation(); // don't execute the command
+        deleteHistoryEntry(cmd);
+      });
+
+      el.appendChild(label);
+      el.appendChild(del);
       historyList.appendChild(el);
     });
+  }
+
+  function deleteHistoryEntry(cmd) {
+    // Remove from local display immediately
+    commandHistory = commandHistory.filter(c => c !== cmd);
+    renderHistory();
+    // Tell server to remove ALL occurrences from the file
+    const tab = tabs.find(t => t.id === activeTabId);
+    const split = tab?.splits[focusedSplit] || tab?.splits[0];
+    const cwd = (split ? split.cwd : null) || tab?.cwd || currentCwd;
+    conn.send({ type: 'deleteHistory', cwd, command: cmd });
   }
 
   // Move command to top of displayed list without waiting for server round-trip

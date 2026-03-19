@@ -105,6 +105,7 @@ export class TerminalServer {
       case 'getCwd':            this.sendCwd(ws, msg.id); break;
       case 'getHistory':        this.sendHistory(ws, msg.cwd); break;
       // 'addHistory' intentionally absent — we never write history ourselves
+      case 'deleteHistory':     this.deleteFromHistory(ws, msg.cwd, msg.command); break;
       case 'createHistoryFile': this.createHistoryFile(ws, msg.cwd); break;
       case 'getBashrcAliases':  this.sendBashrcAliases(ws); break;
     }
@@ -262,6 +263,30 @@ export class TerminalServer {
       }
     } catch(e){}
     this.send(ws, { type: 'history', commands });
+  }
+
+  /**
+   * Remove ALL occurrences of `command` from the history file (local .history
+   * or ~/.bash_history), then send the refreshed history back to the client.
+   * We rewrite the file directly — `history -d` only affects the running
+   * shell's in-memory list and cannot be used reliably from the extension host.
+   */
+  private deleteFromHistory(ws: any, cwd: string, command: string) {
+    if (!command || !command.trim()) return;
+    const cmd = command.trim();
+    const { file } = this.historyFilePath(cwd);
+    try {
+      if (fs.existsSync(file)) {
+        const lines = fs.readFileSync(file, 'utf8').split('\n');
+        // Keep all lines that are NOT this command (handles duplicates + timestamp lines)
+        const filtered = lines.filter(l => l.trim() !== cmd);
+        fs.writeFileSync(file, filtered.join('\n'), 'utf8');
+      }
+    } catch(e) {
+      console.error('[Elve] deleteFromHistory error', e);
+    }
+    // Send refreshed history so the panel updates
+    this.sendHistory(ws, cwd);
   }
 
   // addToHistory removed — Elve no longer writes history files.
