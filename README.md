@@ -1,6 +1,7 @@
 # Elve Terminal
 
-A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels.
+A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels. </br> </br>
+Download: [Link](https://marketplace.visualstudio.com/items?itemName=ElveApps.elve-terminal)
 
 ![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
 
