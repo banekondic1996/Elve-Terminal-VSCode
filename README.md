@@ -1,6 +1,6 @@
 # Elve Terminal
 
-# Screnshot </br>
+# Screenshot </br>
 
 <img src='screenshot.png'/>
 
