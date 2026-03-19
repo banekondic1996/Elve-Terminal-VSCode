@@ -1,0 +1,79 @@
+{
+  "name": "elve-terminal",
+  "displayName": "Elve Terminal",
+  "description": "A powerful custom terminal panel with tabs, split views, per-directory history, themes, and aliases",
+  "version": "1.0.0",
+  "author": "Bane Kondic",
+  "publisher": "ElveApps",
+  "license": "MIT",
+  "icon": "media/logo.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/banekondic1996/Elve-Terminal/tree/vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/banekondic1996/Elve-Terminal/issues"
+  },
+  "homepage": "https://github.com/banekondic1996/Elve-Terminal#readme",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "keywords": ["terminal", "tabs", "split", "history", "aliases", "xterm"],
+  "galleryBanner": { "color": "#0d1117", "theme": "dark" },
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "elveTerminal.openPanel",      "title": "Elve Terminal: Open" },
+      { "command": "elveTerminal.collapseBar",    "title": "Elve: Toggle tab sidebar",  "icon": "$(chevron-right)" },
+      { "command": "elveTerminal.password",       "title": "Elve: Quick Password",      "icon": "$(lock)" },
+      { "command": "elveTerminal.clear",          "title": "Elve: Clear terminal",      "icon": "$(clear-all)" },
+      { "command": "elveTerminal.clearLine",      "title": "Elve: Clear line",          "icon": "$(close)" },
+      { "command": "elveTerminal.kill",           "title": "Elve: Kill process",        "icon": "$(debug-stop)" },
+      { "command": "elveTerminal.toggleHistory",  "title": "Elve: Toggle history",      "icon": "$(history)" },
+      { "command": "elveTerminal.menu",           "title": "Elve: Menu",                "icon": "$(ellipsis)" }
+    ],
+    "views": {
+      "panel": [{
+        "type": "webview",
+        "id": "elveTerminal.panel",
+        "name": "Elve Terminal",
+        "icon": "$(terminal)"
+      }]
+    },
+    "menus": {
+      "view/title": [
+        { "command": "elveTerminal.collapseBar",   "when": "view == elveTerminal.panel", "group": "navigation@1" },
+        { "command": "elveTerminal.password",      "when": "view == elveTerminal.panel", "group": "navigation@2" },
+        { "command": "elveTerminal.clear",         "when": "view == elveTerminal.panel", "group": "navigation@3" },
+        { "command": "elveTerminal.clearLine",     "when": "view == elveTerminal.panel", "group": "navigation@4" },
+        { "command": "elveTerminal.kill",          "when": "view == elveTerminal.panel", "group": "navigation@5" },
+        { "command": "elveTerminal.toggleHistory", "when": "view == elveTerminal.panel", "group": "navigation@6" },
+        { "command": "elveTerminal.menu",          "when": "view == elveTerminal.panel", "group": "navigation@7" }
+      ]
+    },
+    "keybindings": [{
+      "command": "elveTerminal.openPanel",
+      "key": "ctrl+alt+e",
+      "mac": "cmd+alt+e"
+    }]
+  },
+  "scripts": {
+    "compile": "node scripts/copy-xterm.js && tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "node scripts/copy-xterm.js && tsc -p ./ && node -e \"require('child_process').execSync('npx @vscode/vsce package', {stdio:'inherit'})\"",
+    "vscode:prepublish": "node scripts/copy-xterm.js && tsc -p ./"
+  },
+  "dependencies": {
+    "node-pty": "^1.1.0-beta37",
+    "ws": "^8.14.2",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "xterm-addon-web-links": "^0.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "@types/ws": "^8.5.5",
+    "typescript": "^5.0.0"
+  }
+}
