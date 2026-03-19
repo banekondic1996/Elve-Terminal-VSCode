@@ -23,3 +23,16 @@ Changed to integrating buttons into top bar via VS Code API
 ## [1.0.2] — Release
 Many bug fixes
 Returned back to using bash history
+
+## [1.0.3] — Release
+Added bell button
+Added status bar terminal button for easy access
+
+## [1.0.4] — Release
+Fix bell button not ringing
+
+## [1.0.5] — Release
+Added option to delete history enteries
+
+
+
