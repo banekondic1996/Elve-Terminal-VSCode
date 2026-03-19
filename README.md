@@ -5,8 +5,7 @@ Download: [Link](https://marketplace.visualstudio.com/items?itemName=ElveApps.el
 </br> </br>
 **ToDo:**
 <pre>
-  -Fix scrollbar issue
-  -Fix not autoscrolling to bottom on tab change
+
 </pre>
 **Screenshot:**
 ![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
