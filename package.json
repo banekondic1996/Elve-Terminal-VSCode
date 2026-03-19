@@ -2,7 +2,7 @@
   "name": "elve-terminal",
   "displayName": "Elve Terminal",
   "description": "A powerful custom terminal panel with tabs, split views, per-directory history, themes, and aliases",
-  "version": "1.0.2",
+ "version": "1.0.2",
   "author": "Bane Kondic",
   "publisher": "ElveApps",
   "license": "MIT",
@@ -15,46 +15,246 @@
     "url": "https://github.com/banekondic1996/Elve-Terminal-VSCode/issues"
   },
   "homepage": "https://github.com/banekondic1996/Elve-Terminal-VSCode#readme",
-  "engines": { "vscode": "^1.80.0" },
-  "categories": ["Other"],
-  "keywords": ["terminal", "tabs", "split", "history", "aliases", "xterm"],
-  "galleryBanner": { "color": "#0d1117", "theme": "dark" },
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "terminal",
+    "tabs",
+    "split",
+    "history",
+    "aliases",
+    "xterm"
+  ],
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "elveTerminal.collapseBar",    "title": "Elve: Toggle tab sidebar",  "icon": "$(chevron-right)" },
-      { "command": "elveTerminal.password",       "title": "Elve: Quick Password",      "icon": "$(lock)" },
-      { "command": "elveTerminal.clear",          "title": "Elve: Clear terminal",      "icon": "$(clear-all)" },
-      { "command": "elveTerminal.clearLine",      "title": "Elve: Clear line",          "icon": "$(close)" },
-      { "command": "elveTerminal.kill",           "title": "Elve: Kill process",        "icon": "$(debug-stop)" },
-      { "command": "elveTerminal.toggleHistory",  "title": "Elve: Toggle history",      "icon": "$(history)" },
-      { "command": "elveTerminal.menu",           "title": "Elve: Menu",                "icon": "$(ellipsis)" }
+      {
+        "command": "elveTerminal.openPanel",
+        "title": "Elve Terminal: Open"
+      },
+      {
+        "command": "elveTerminal.collapseBar",
+        "title": "Elve: Toggle tab sidebar",
+        "icon": "$(chevron-right)"
+      },
+      {
+        "command": "elveTerminal.password",
+        "title": "Elve: Quick Password",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "elveTerminal.clear",
+        "title": "Elve: Clear terminal",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "elveTerminal.clearLine",
+        "title": "Elve: Clear line",
+        "icon": "$(close)"
+      },
+      {
+        "command": "elveTerminal.kill",
+        "title": "Elve: Kill process",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "elveTerminal.toggleHistory",
+        "title": "Elve: Toggle history",
+        "icon": "$(history)"
+      },
+      {
+        "command": "elveTerminal.menu",
+        "title": "Elve: Menu",
+        "icon": "$(ellipsis)"
+      },
+      {
+        "command": "elveTerminal.bell",
+        "title": "Elve: Alert on idle",
+        "icon": "$(bell)"
+      },
+      {
+        "command": "elveTerminal.ctx.copy",
+        "title": "Copy"
+      },
+      {
+        "command": "elveTerminal.ctx.paste",
+        "title": "Paste"
+      },
+      {
+        "command": "elveTerminal.ctx.splitH",
+        "title": "Split Horizontal"
+      },
+      {
+        "command": "elveTerminal.ctx.splitV",
+        "title": "Split Vertical"
+      },
+      {
+        "command": "elveTerminal.ctx.pacman",
+        "title": "Install with pacman"
+      },
+      {
+        "command": "elveTerminal.ctx.yay",
+        "title": "Install with yay"
+      },
+      {
+        "command": "elveTerminal.ctx.apt",
+        "title": "Install with apt-get"
+      },
+      {
+        "command": "elveTerminal.ctx.dnf",
+        "title": "Install with dnf"
+      },
+      {
+        "command": "elveTerminal.ctx.search",
+        "title": "Web Search"
+      },
+      {
+        "command": "elveTerminal.ctx.histExecute",
+        "title": "Execute"
+      },
+      {
+        "command": "elveTerminal.ctx.histCopyInput",
+        "title": "Copy to input"
+      },
+      {
+        "command": "elveTerminal.ctx.histCopy",
+        "title": "Copy"
+      }
     ],
     "views": {
-      "panel": [{
-        "type": "webview",
-        "id": "elveTerminal.panel",
-        "name": "Elve Terminal",
-        "icon": "$(terminal)"
-      }]
+      "panel": [
+        {
+          "type": "webview",
+          "id": "elveTerminal.panel",
+          "name": "Elve Terminal",
+          "icon": "$(terminal)"
+        }
+      ]
     },
     "menus": {
       "view/title": [
-        { "command": "elveTerminal.collapseBar",   "when": "view == elveTerminal.panel", "group": "navigation@1" },
-        { "command": "elveTerminal.password",      "when": "view == elveTerminal.panel", "group": "navigation@2" },
-        { "command": "elveTerminal.clear",         "when": "view == elveTerminal.panel", "group": "navigation@3" },
-        { "command": "elveTerminal.clearLine",     "when": "view == elveTerminal.panel", "group": "navigation@4" },
-        { "command": "elveTerminal.kill",          "when": "view == elveTerminal.panel", "group": "navigation@5" },
-        { "command": "elveTerminal.toggleHistory", "when": "view == elveTerminal.panel", "group": "navigation@6" },
-        { "command": "elveTerminal.menu",          "when": "view == elveTerminal.panel", "group": "navigation@7" }
+        {
+          "command": "elveTerminal.collapseBar",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "elveTerminal.password",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "elveTerminal.bell",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@3"
+        },
+        {
+          "command": "elveTerminal.clear",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@4"
+        },
+        {
+          "command": "elveTerminal.clearLine",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@5"
+        },
+        {
+          "command": "elveTerminal.kill",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@6"
+        },
+        {
+          "command": "elveTerminal.toggleHistory",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@7"
+        },
+        {
+          "command": "elveTerminal.menu",
+          "when": "view == elveTerminal.panel",
+          "group": "navigation@8"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "elveTerminal.ctx.copy",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
+          "group": "1_terminal@1"
+        },
+        {
+          "command": "elveTerminal.ctx.paste",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
+          "group": "1_terminal@2"
+        },
+        {
+          "command": "elveTerminal.ctx.splitH",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
+          "group": "2_split@1"
+        },
+        {
+          "command": "elveTerminal.ctx.splitV",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
+          "group": "2_split@2"
+        },
+        {
+          "command": "elveTerminal.ctx.pacman",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal' && elveHasSelection",
+          "group": "3_install@1"
+        },
+        {
+          "command": "elveTerminal.ctx.yay",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal' && elveHasSelection",
+          "group": "3_install@2"
+        },
+        {
+          "command": "elveTerminal.ctx.apt",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal' && elveHasSelection",
+          "group": "3_install@3"
+        },
+        {
+          "command": "elveTerminal.ctx.dnf",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal' && elveHasSelection",
+          "group": "3_install@4"
+        },
+        {
+          "command": "elveTerminal.ctx.search",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal' && elveHasSelection",
+          "group": "3_install@5"
+        },
+        {
+          "command": "elveTerminal.ctx.histExecute",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'historyItem'",
+          "group": "1_hist@1"
+        },
+        {
+          "command": "elveTerminal.ctx.histCopyInput",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'historyItem'",
+          "group": "1_hist@2"
+        },
+        {
+          "command": "elveTerminal.ctx.histCopy",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'historyItem'",
+          "group": "1_hist@3"
+        }
       ]
     },
-    "keybindings": [{
-      "command": "elveTerminal.openPanel",
-      "key": "ctrl+alt+e",
-      "mac": "cmd+alt+e"
-    }]
+    "keybindings": [
+      {
+        "command": "elveTerminal.openPanel",
+        "key": "ctrl+alt+e",
+        "mac": "cmd+alt+e"
+      }
+    ]
   },
   "scripts": {
     "compile": "node scripts/copy-xterm.js && tsc -p ./",

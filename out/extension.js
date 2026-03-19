@@ -38,7 +38,6 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const terminalServer_1 = require("./terminalServer");
 let terminalServer = null;
-// Keep a reference so commands can post messages into the webview
 let webviewView = null;
 function postCmd(cmd) {
     webviewView?.webview.postMessage({ type: 'hostCommand', cmd });
@@ -54,21 +53,53 @@ async function activate(context) {
     statusBar.tooltip = `Elve Terminal WebSocket on 127.0.0.1:${terminalServer.port}`;
     const provider = new ElveTerminalPanelProvider(context, terminalServer);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(ElveTerminalPanelProvider.viewType, provider, { webviewOptions: { retainContextWhenHidden: true } }));
-    // ── Register all panel-button commands ──────────────────────────────────
-    const cmds = [
+    // ── Panel header button commands ─────────────────────────────────────────
+    const headerCmds = [
         ['elveTerminal.openPanel', 'openPanel'],
         ['elveTerminal.collapseBar', 'collapseBar'],
         ['elveTerminal.password', 'password'],
+        ['elveTerminal.bell', 'bell'],
         ['elveTerminal.clear', 'clear'],
         ['elveTerminal.clearLine', 'clearLine'],
         ['elveTerminal.kill', 'kill'],
         ['elveTerminal.toggleHistory', 'toggleHistory'],
         ['elveTerminal.menu', 'menu'],
     ];
-    for (const [id, cmd] of cmds) {
+    for (const [id, cmd] of headerCmds) {
         context.subscriptions.push(vscode.commands.registerCommand(id, () => {
             if (cmd === 'openPanel') {
                 vscode.commands.executeCommand(`${ElveTerminalPanelProvider.viewType}.focus`);
+            }
+            else {
+                postCmd(cmd);
+            }
+        }));
+    }
+    // ── webview/context menu commands — forward action into webview ───────────
+    const ctxCmds = [
+        ['elveTerminal.ctx.copy', 'ctx.copy'],
+        ['elveTerminal.ctx.paste', 'ctx.paste'],
+        ['elveTerminal.ctx.splitH', 'ctx.splitH'],
+        ['elveTerminal.ctx.splitV', 'ctx.splitV'],
+        ['elveTerminal.ctx.pacman', 'ctx.pacman'],
+        ['elveTerminal.ctx.yay', 'ctx.yay'],
+        ['elveTerminal.ctx.apt', 'ctx.apt'],
+        ['elveTerminal.ctx.dnf', 'ctx.dnf'],
+        ['elveTerminal.ctx.search', 'ctx.search'],
+        ['elveTerminal.ctx.histExecute', 'ctx.histExecute'],
+        ['elveTerminal.ctx.histCopyInput', 'ctx.histCopyInput'],
+        ['elveTerminal.ctx.histCopy', 'ctx.histCopy'],
+    ];
+    for (const [id, cmd] of ctxCmds) {
+        context.subscriptions.push(vscode.commands.registerCommand(id, async () => {
+            if (cmd === 'ctx.paste') {
+                // Read clipboard in extension host (no browser gesture restriction)
+                const text = await vscode.env.clipboard.readText();
+                webviewView?.webview.postMessage({ type: 'hostCommand', cmd: 'ctx.paste', text });
+            }
+            else if (cmd === 'ctx.copy') {
+                // Ask webview to copy xterm selection — it will postMessage the text back
+                webviewView?.webview.postMessage({ type: 'hostCommand', cmd: 'ctx.copy' });
             }
             else {
                 postCmd(cmd);
@@ -93,6 +124,26 @@ class ElveTerminalPanelProvider {
             localResourceRoots: [mediaUri]
         };
         view.webview.html = this.buildHtml(view.webview, mediaUri);
+        // Handle messages from the webview
+        view.webview.onDidReceiveMessage(async (msg) => {
+            if (msg.type === 'openExternal') {
+                vscode.env.openExternal(vscode.Uri.parse(msg.url));
+            }
+            if (msg.type === 'setContext') {
+                vscode.commands.executeCommand('setContext', 'elveHasSelection', msg.value);
+            }
+            // Webview sends selected text so we can write it to the VS Code clipboard
+            if (msg.type === 'copyToClipboard') {
+                await vscode.env.clipboard.writeText(msg.text);
+            }
+            // Bell armed — show notification
+            if (msg.type === 'bellArmed') {
+                vscode.window.showInformationMessage('🔔 Elve: monitoring started — will beep when terminal goes idle.');
+            }
+            if (msg.type === 'bellFired') {
+                vscode.window.showInformationMessage('🔔 Elve: terminal finished!');
+            }
+        });
     }
     buildHtml(webview, mediaUri) {
         const uri = (file) => webview.asWebviewUri(vscode.Uri.joinPath(mediaUri, file));
@@ -122,18 +173,18 @@ class ElveTerminalPanelProvider {
 <body>
 <div class="terminal-container">
 
-  <!-- Collapsible tab sidebar (left) + terminal area -->
   <div class="main-content">
 
-    <!-- Left tab sidebar — icon rail always visible, full list on hover -->
+    <!-- Left tab sidebar -->
     <div class="tab-sidebar" id="tab-sidebar">
       <div class="tab-sidebar-inner" id="tab-sidebar-inner">
         <div class="tab-list" id="tabs-container"></div>
       </div>
     </div>
 
-    <!-- Terminal -->
-    <div class="terminal-area" id="terminal-area"></div>
+    <!-- Terminal area — gives the right-click context its webviewSection -->
+    <div class="terminal-area" id="terminal-area"
+         data-vscode-context='{"webviewSection":"terminal","preventDefaultContextMenuItems":true}'></div>
 
     <!-- History sidebar -->
     <div class="history-sidebar" id="history-sidebar" style="display:none;">
@@ -192,9 +243,6 @@ class ElveTerminalPanelProvider {
           <input type="range" id="saturation" min="0" max="200" value="100">
         </div>
         <div class="setting-group">
-          <label><input type="checkbox" id="beep-on-idle"> Beep on idle</label>
-        </div>
-        <div class="setting-group">
           <label><input type="checkbox" id="show-input-box"> Bottom input box</label>
         </div>
         <div class="setting-group">
@@ -230,30 +278,7 @@ class ElveTerminalPanelProvider {
 
 </div><!-- end terminal-container -->
 
-<!-- Context menus -->
-<div class="context-menu" id="context-menu" style="display:none;">
-  <div class="context-item" data-action="copy">Copy</div>
-  <div class="context-item" data-action="paste">Paste</div>
-  <div class="context-divider"></div>
-  <div class="context-item" data-action="split-horizontal">Split Horizontal</div>
-  <div class="context-item" data-action="split-vertical">Split Vertical</div>
-  <div class="context-divider"></div>
-  <div class="context-item" data-action="pacman">Install with pacman</div>
-  <div class="context-item" data-action="yay">Install with yay</div>
-  <div class="context-item" data-action="apt">Install with apt-get</div>
-  <div class="context-item" data-action="dnf">Install with dnf</div>
-  <div class="context-divider"></div>
-  <div class="context-item" data-action="search">Web Search</div>
-</div>
-
-<div class="context-menu" id="history-context-menu" style="display:none;">
-  <div class="context-item" data-action="execute">Execute</div>
-  <div class="context-item" data-action="copy-to-input">Copy to input</div>
-  <div class="context-divider"></div>
-  <div class="context-item" data-action="copy">Copy</div>
-</div>
-
-<!-- Submenu (replaces old dropdown-menu — triggered by hostCommand:menu) -->
+<!-- Main submenu (⋯ button) -->
 <div class="dropdown-menu" id="main-menu" style="display:none;">
   <div class="menu-item" data-action="control-aliases">Aliases</div>
   <div class="menu-item" data-action="settings">Settings</div>

@@ -2,6 +2,8 @@
 (function () {
   'use strict';
 
+  window.vscode = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
+
   const WS_PORT = window.ELVE_WS_PORT;
   const INITIAL_CWD = window.ELVE_INITIAL_CWD || (navigator.platform.includes('Win') ? 'C:\\' : '/');
 
@@ -144,7 +146,6 @@
     brightness: 100,
     bgOpacity: 100,
     saturation: 100,
-    beepOnIdle: false,
     showInputBox: false,
     neverCollapseSidebar: false,
     ctrlVPaste: false,
@@ -153,6 +154,70 @@
     const saved = JSON.parse(localStorage.getItem('elveSettings') || '{}');
     Object.assign(settings, saved);
   } catch(e){}
+
+  // ── Bell (alert on idle) state ───────────────────────────────────────────
+  // bellArmed: user clicked bell once — watching for idle
+  // bellFired: alarm went off, showing red for 10s
+  let bellArmed  = false;
+  let bellFired  = false;
+  let bellResetTimer = null;
+  let lastOutputTime = Date.now();
+  const IDLE_THRESHOLD_MS = 1500; // fire after 1.5s of silence (prompt redraw is fast)
+
+  function updateBellIcon() {
+    window.vscode?.postMessage({
+      type: 'setContext',
+      key: 'elveBellState',
+      value: bellFired ? 'fired' : bellArmed ? 'armed' : 'off'
+    });
+    // postCmd so terminal.js can tell the extension to update the icon label
+    // We encode state in the hostCommand reply instead — handled in hostCommand 'bell'
+  }
+
+  function armBell() {
+    if (bellFired) return; // reset first
+    bellArmed = !bellArmed;
+    updateBellIcon();
+    if (bellArmed) {
+      // Notify VS Code (shows info notification)
+      window.vscode?.postMessage({ type: 'bellArmed' });
+      // Print confirmation in the active terminal
+      const tab0 = tabs.find(t => t.id === activeTabId);
+      const term0 = (tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term;
+      term0?.writeln('\r\n\x1b[32m🔔 Monitoring started — will beep when terminal goes idle.\x1b[0m');
+    }
+  }
+
+  function onBellFired() {
+    bellArmed = false;
+    bellFired = true;
+    updateBellIcon();
+    // Notify VS Code notification
+    window.vscode?.postMessage({ type: 'bellFired' });
+    // Print in terminal
+    const tab0 = tabs.find(t => t.id === activeTabId);
+    const term0 = (tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term;
+    term0?.writeln('\r\n\x1b[31m🔔 Terminal idle — command finished!\x1b[0m');
+    // Play audible beep (two short tones)
+    try {
+      const actx = new AudioContext();
+      [[880, 0, 0.15], [1100, 0.2, 0.15]].forEach(([freq, start, dur]) => {
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.connect(gain); gain.connect(actx.destination);
+        osc.type = 'sine'; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.4, actx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + start + dur);
+        osc.start(actx.currentTime + start);
+        osc.stop(actx.currentTime + start + dur + 0.05);
+      });
+    } catch(e){}
+    if (bellResetTimer) clearTimeout(bellResetTimer);
+    bellResetTimer = setTimeout(() => {
+      bellFired = false;
+      updateBellIcon();
+    }, 10000);
+  }
 
   const conn = new Conn();
 
@@ -164,8 +229,6 @@
   const historyList    = $('history-list');
   const settingsPanel  = $('settings-panel');
   const aliasPanel     = $('alias-panel');
-  const ctxMenu        = $('context-menu');
-  const histCtxMenu    = $('history-context-menu');
   const mainMenu       = $('main-menu');
   const tabSidebar     = $('tab-sidebar');
 
@@ -180,7 +243,6 @@
     set('brightness', settings.brightness);
     set('bg-opacity', settings.bgOpacity);
     set('saturation', settings.saturation);
-    setC('beep-on-idle', settings.beepOnIdle);
     setC('show-input-box', settings.showInputBox);
     setC('never-collapse-sidebar', settings.neverCollapseSidebar);
     setC('ctrl-v-paste', settings.ctrlVPaste);
@@ -602,6 +664,14 @@
     if (term) term.write(msg.data);
     const fn = split ? split.onOutputData : tab.onOutputData;
     if (fn) fn(msg.data);
+    // Bell idle detection: any output resets the idle timer.
+    // When output stops for IDLE_THRESHOLD_MS, the bell fires.
+    if (bellArmed) {
+      clearTimeout(window._bellIdleTimer);
+      window._bellIdleTimer = setTimeout(() => {
+        if (bellArmed) onBellFired();
+      }, IDLE_THRESHOLD_MS);
+    }
   });
 
   conn.on('created', msg => {
@@ -677,6 +747,7 @@
       el.className = 'history-item';
       el.textContent = cmd;
       el.dataset.command = cmd;
+      el.dataset.vscodeContext = JSON.stringify({ webviewSection: 'historyItem', preventDefaultContextMenuItems: true });
       historyList.appendChild(el);
     });
   }
@@ -741,8 +812,6 @@
   }
 
   function hideMenus() {
-    ctxMenu.style.display = 'none';
-    histCtxMenu.style.display = 'none';
     mainMenu.style.display = 'none';
   }
 
@@ -810,6 +879,57 @@
       }
       case 'clearLine':  sendToActive('\x15'); break;
       case 'kill':       sendToActive('\x03'); break;
+
+      // ── webview/context menu actions ────────────────────────────────────
+      case 'ctx.copy': {
+        // Get the live xterm selection at command time (not stale selectedText)
+        const tab0 = tabs.find(t => t.id === activeTabId);
+        const liveText = ((tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term)?.getSelection?.() || selectedText;
+        if (liveText && window.vscode) {
+          window.vscode.postMessage({ type: 'copyToClipboard', text: liveText });
+        } else {
+          navigator.clipboard.writeText(liveText).catch(()=>{});
+        }
+        break;
+      }
+      case 'ctx.paste': {
+        // Extension host pre-fetched the clipboard text and sent it with the command
+        const pasteText = msg.text;
+        if (pasteText) {
+          const tab2 = tabs.find(t => t.id === activeTabId);
+          const sid2 = (tab2?.splits[focusedSplit]||tab2?.splits[0])?.sid || tab2?.sid;
+          if (sid2) conn.send({ type:'input', id:sid2, data:pasteText });
+        }
+        break;
+      }
+      case 'ctx.splitH': { const t2=tabs.find(t=>t.id===activeTabId); if(t2) splitTerminal(t2,'horizontal'); break; }
+      case 'ctx.splitV': { const t2=tabs.find(t=>t.id===activeTabId); if(t2) splitTerminal(t2,'vertical'); break; }
+      case 'ctx.pacman': execCmd('sudo pacman -S ' + selectedText); break;
+      case 'ctx.yay':    execCmd('yay -S ' + selectedText); break;
+      case 'ctx.apt':    execCmd('sudo apt-get install ' + selectedText); break;
+      case 'ctx.dnf':    execCmd('sudo dnf install ' + selectedText); break;
+      case 'ctx.search':
+        if (window.vscode) window.vscode.postMessage({ type:'openExternal', url:'https://www.google.com/search?q='+encodeURIComponent(selectedText) });
+        break;
+      // History context menu
+      case 'ctx.histExecute':   sendToActive(selectedHistCmd + '\r'); break;
+      case 'ctx.histCopyInput': sendToActive(selectedHistCmd); break;
+      case 'ctx.histCopy':
+        if (selectedHistCmd && window.vscode) window.vscode.postMessage({ type: 'copyToClipboard', text: selectedHistCmd });
+        else navigator.clipboard.writeText(selectedHistCmd || '').catch(()=>{});
+        break;
+      case 'bell':
+        if (bellFired) {
+          // clicking while red resets it
+          bellFired = false;
+          bellArmed = false;
+          if (bellResetTimer) clearTimeout(bellResetTimer);
+          clearTimeout(window._bellIdleTimer);
+          updateBellIcon();
+        } else {
+          armBell();
+        }
+        break;
       case 'toggleHistory':
         showHistory = !showHistory;
         historySidebar.style.display = showHistory ? 'flex' : 'none';
@@ -833,6 +953,8 @@
         break;
     }
   });
+
+
 
   // ── Submenu actions ────────────────────────────────────────────────────────
   mainMenu.addEventListener('click', e => {
@@ -876,52 +998,21 @@
   historyList.addEventListener('contextmenu', e => {
     const item = e.target.closest('.history-item');
     if (!item) return;
-    e.preventDefault();
+    // Just track which command was right-clicked; VS Code shows the native menu
     selectedHistCmd = item.dataset.command;
-    showMenu(histCtxMenu, e.clientX, e.clientY);
   });
 
-  histCtxMenu.addEventListener('click', e => {
-    const action = e.target.closest('[data-action]')?.dataset.action;
-    if (!action) return;
-    if (action === 'execute')       { sendToActive(selectedHistCmd + '\r'); }
-    if (action === 'copy-to-input') sendToActive(selectedHistCmd);
-    if (action === 'copy')          navigator.clipboard.writeText(selectedHistCmd).catch(()=>{});
-    hideMenus();
-  });
-
-  // ── Right-click on terminal ────────────────────────────────────────────────
+  // ── Track selection for webview/context when-clause ──────────────────────
   document.addEventListener('contextmenu', e => {
     const tab = tabs.find(t => t.id === activeTabId);
     if (!tab || !e.target.closest('#terminal-area')) return;
-    e.preventDefault();
     selectedText = (tab.splits[focusedSplit]?.term || tab.term).getSelection?.().trim() || '';
-    const hasSel = !!selectedText;
-    ctxMenu.querySelectorAll('[data-action="pacman"],[data-action="yay"],[data-action="apt"],[data-action="dnf"],[data-action="search"]')
-      .forEach(el => el.style.display = hasSel ? '' : 'none');
-    showMenu(ctxMenu, e.clientX, e.clientY);
-  });
-
-  ctxMenu.addEventListener('click', e => {
-    const action = e.target.closest('[data-action]')?.dataset.action;
-    if (!action) return;
-    e.stopPropagation();
-    const tab = tabs.find(t => t.id === activeTabId);
-    const sid = (tab?.splits[focusedSplit]||tab?.splits[0])?.sid || tab?.sid;
-    if (action === 'copy')             navigator.clipboard.writeText(selectedText).catch(()=>{});
-    if (action === 'paste')            navigator.clipboard.readText().then(t=>conn.send({type:'input',id:sid,data:t})).catch(()=>{});
-    if (action === 'split-horizontal') splitTerminal(tab, 'horizontal');
-    if (action === 'split-vertical')   splitTerminal(tab, 'vertical');
-    if (action === 'pacman')  execCmd('sudo pacman -S ' + selectedText);
-    if (action === 'yay')     execCmd('yay -S ' + selectedText);
-    if (action === 'apt')     execCmd('sudo apt-get install ' + selectedText);
-    if (action === 'dnf')     execCmd('sudo dnf install ' + selectedText);
-    if (action === 'search')  window.open('https://www.google.com/search?q=' + encodeURIComponent(selectedText), '_blank');
-    hideMenus();
+    // Tell extension host so elveHasSelection when-clause stays accurate
+    if (window.vscode) window.vscode.postMessage({ type: 'setContext', value: !!selectedText });
   });
 
   document.addEventListener('click', e => {
-    if (!e.target.closest('.context-menu') && !e.target.closest('.dropdown-menu')) hideMenus();
+    if (!e.target.closest('.dropdown-menu')) hideMenus();
   });
 
   // ── Password dialog ────────────────────────────────────────────────────────
@@ -962,7 +1053,6 @@
   watchRange('saturation', 'saturation-value', v => settings.saturation = parseInt(v));
   $('font-family').addEventListener('change', e => { settings.fontFamily = e.target.value; saveSettings(); applyTheme(); });
   $('theme').addEventListener('change', e => { settings.theme = e.target.value; saveSettings(); applyTheme(); });
-  $('beep-on-idle').addEventListener('change', e => { settings.beepOnIdle = e.target.checked; saveSettings(); });
   $('show-input-box').addEventListener('change', e => {
     settings.showInputBox = e.target.checked; saveSettings();
     $('input-box-container').style.display = e.target.checked ? 'flex' : 'none';
