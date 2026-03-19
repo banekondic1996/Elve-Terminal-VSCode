@@ -275,62 +275,24 @@
     });
     conn.send({ type: 'create', id: sid, cwd });
 
-    let inputBuffer = '';
-    // When user navigates history with arrow keys, bash rewrites the line via pty output.
-    // We watch output for that rewrite to keep inputBuffer accurate.
-    let awaitingLineRewrite = false;
-    const onOutputData = (raw) => {
-      // Strip all ANSI escape sequences
-      const stripped = raw.replace(/\x1b\[[\d;]*[a-zA-Z]/g, '').replace(/\x1b[()][AB012]/g, '').replace(/\x1b./g, '');
-      // A line rewrite looks like \r + text (no \n) — bash redrawing the prompt+command
-      // We only care about what comes after the last \r on a non-newline segment
-      if (awaitingLineRewrite && stripped.includes('\r')) {
-        const parts = stripped.split('\r');
-        // Take the last part — that's the redrawn line content
-        const last = parts[parts.length - 1];
-        // Strip the prompt portion: everything up to and including '$ ' or '# '
-        const promptMatch = last.match(/[$#]\s(.*)$/);
-        if (promptMatch) {
-          inputBuffer = promptMatch[1].trimEnd();
-        } else if (last.trim() && !last.includes('\n')) {
-          // No recognizable prompt, but has content — use as-is
-          inputBuffer = last.trimEnd();
-        }
-        awaitingLineRewrite = false;
-      }
-    };
+    // No inputBuffer needed — Elve never writes history; the shell hook does.
+    const onOutputData = (_raw) => {}; // kept for compat with split-pane wiring
 
     term.onData(data => {
       conn.send({ type: 'input', id: sid, data });
+      // On Enter: refresh history for this split's cwd, but only if it's the focused pane
       if (data === '\r') {
-        const cmd = inputBuffer.trim();
-        if (cmd) {
-          const tab = tabs.find(t => t.sid === sid || t.splits.some(s => s.sid === sid));
-          const split = tab?.splits.find(s => s.sid === sid);
-          const tabCwd = split ? (split.cwd || tab.cwd) : (tab ? tab.cwd : currentCwd);
-          conn.send({ type: 'addHistory', cwd: tabCwd, command: cmd });
-        }
-        inputBuffer = '';
-        awaitingLineRewrite = false;
-      } else if (data === '\x7f' || data === '\b') {
-        inputBuffer = inputBuffer.slice(0, -1);
-      } else if (data === '\x15') {
-        inputBuffer = '';
-      } else if (data.startsWith('\x1b')) {
-        // Escape sequence — arrow keys, function keys etc.
-        // Reset buffer; if it's an arrow up/down, watch pty output for the rewritten line
-        const isHistoryNav = data === '\x1b[A' || data === '\x1b[B';
-        if (isHistoryNav) {
-          inputBuffer = '';
-          awaitingLineRewrite = true;
-        }
-      } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-        inputBuffer += data;
-        awaitingLineRewrite = false;
-      } else if (data.length > 1 && !data.startsWith('\x1b')) {
-        // Pasted text — add printable chars only
-        inputBuffer += data.replace(/[^\x20-\x7e]/g, '');
-        awaitingLineRewrite = false;
+        setTimeout(() => {
+          const ownerTab = tabs.find(t => t.sid === sid || t.splits.some(s => s.sid === sid));
+          if (!ownerTab || ownerTab.id !== activeTabId) return;
+          const ownerSplit = ownerTab.splits.find(s => s.sid === sid);
+          const splitIdx = ownerSplit ? ownerTab.splits.indexOf(ownerSplit) : -1;
+          // Only refresh if this sid is the focused split (or it's a non-split tab)
+          const isFocused = ownerTab.splits.length === 0 || splitIdx === focusedSplit;
+          if (!isFocused) return;
+          const cwd = ownerSplit ? (ownerSplit.cwd || ownerTab.cwd) : ownerTab.cwd;
+          conn.send({ type: 'getHistory', cwd });
+        }, 400);
       }
     });
     term.onResize(({ cols, rows }) => conn.send({ type: 'resize', id: sid, cols, rows }));
@@ -377,6 +339,15 @@
     return parts.filter(Boolean).pop() || 'bash';
   }
 
+  // Poll cwd for every active sid in a tab (main + all splits)
+  function pollCwdForTab(tab) {
+    if (tab.splits.length > 0) {
+      tab.splits.forEach(s => conn.send({ type: 'getCwd', id: s.sid }));
+    } else {
+      conn.send({ type: 'getCwd', id: tab.sid });
+    }
+  }
+
   function addTab(cwd) {
     const id = nextTabId++;
     const resolvedCwd = cwd || (tabs.length ? tabs[tabs.length-1].cwd : INITIAL_CWD);
@@ -386,8 +357,9 @@
       term, fa, sid, onOutputData,
       splits: [], splitDir: 'horizontal',
       el: null, wrapper: null, onResize: null,
-      cwdTimer: setInterval(() => conn.send({ type:'getCwd', id: sid }), 2000),
+      cwdTimer: null,
     };
+    tab.cwdTimer = setInterval(() => pollCwdForTab(tab), 2000);
     tabs.push(tab);
     renderTabSidebar();
     switchTab(id);
@@ -641,6 +613,7 @@
       if (split.cwd === msg.cwd) return;
       split.cwd = msg.cwd;
       const splitIdx = tab.splits.indexOf(split);
+      // Only update currentCwd and history if this is the active tab's focused split
       if (tab.id === activeTabId && splitIdx === focusedSplit) {
         currentCwd = msg.cwd;
         if (showHistory) conn.send({ type: 'getHistory', cwd: msg.cwd });
@@ -649,9 +622,18 @@
       if (msg.cwd === tab.cwd) return;
       tab.cwd = msg.cwd;
       tab.name = cwdName(msg.cwd);
-      currentCwd = msg.cwd;
+      // In split view the tab's own sid is split[0]; update that split's cwd too
+      if (tab.splits.length > 0) {
+        const s0 = tab.splits.find(s => s.sid === tab.sid);
+        if (s0) s0.cwd = msg.cwd;
+      }
       renderTabSidebar();
-      if (tab.id === activeTabId && showHistory) conn.send({ type: 'getHistory', cwd: msg.cwd });
+      if (tab.id === activeTabId) {
+        currentCwd = msg.cwd;
+        // Only refresh history if no splits, or if split[0] is focused
+        const isFocused = tab.splits.length === 0 || focusedSplit === 0;
+        if (isFocused && showHistory) conn.send({ type: 'getHistory', cwd: msg.cwd });
+      }
     }
   });
 
@@ -710,9 +692,6 @@
     for (const p of ['pacman ','apt-get ','apt ','dnf ']) {
       if (cmd.startsWith(p) && !cmd.startsWith('sudo ')) { cmd = 'sudo ' + cmd; break; }
     }
-    const tab = tabs.find(t => t.id === activeTabId);
-    if (tab) conn.send({ type: 'addHistory', cwd: tab.cwd, command: cmd });
-    promoteHistory(cmd);
     sendToActive(cmd + '\r');
   }
 
@@ -878,8 +857,8 @@
     const item = e.target.closest('.history-item');
     if (!item) return;
     const cmd = item.dataset.command;
-    promoteHistory(cmd);   // move to top immediately
     sendToActive(cmd + '\r');
+    // History will update on next poll / cwd-change; no client-side write needed
   });
 
   historyList.addEventListener('contextmenu', e => {
@@ -893,7 +872,7 @@
   histCtxMenu.addEventListener('click', e => {
     const action = e.target.closest('[data-action]')?.dataset.action;
     if (!action) return;
-    if (action === 'execute')       { promoteHistory(selectedHistCmd); sendToActive(selectedHistCmd + '\r'); }
+    if (action === 'execute')       { sendToActive(selectedHistCmd + '\r'); }
     if (action === 'copy-to-input') sendToActive(selectedHistCmd);
     if (action === 'copy')          navigator.clipboard.writeText(selectedHistCmd).catch(()=>{});
     hideMenus();

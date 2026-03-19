@@ -1,13 +1,4 @@
-# Elve Terminal 
-
-# ToDo:
-<pre>
-  -Fix history, just read bash history or .history file 60 enteries at each enter. Read whole, take distinct entries, trim to 60 entries 
-</pre>
-
-# Screenshot </br>
-
-<img src='screenshot.png'/>
+# Elve Terminal
 
 A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels.
 
