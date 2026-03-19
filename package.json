@@ -2,19 +2,19 @@
   "name": "elve-terminal",
   "displayName": "Elve Terminal",
   "description": "A powerful custom terminal panel with tabs, split views, per-directory history, themes, and aliases",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "author": "Bane Kondic",
   "publisher": "ElveApps",
   "license": "MIT",
   "icon": "media/logo.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/banekondic1996/Elve-Terminal/tree/vscode-extension"
+    "url": "https://github.com/banekondic1996/Elve-Terminal-VSCode"
   },
   "bugs": {
-    "url": "https://github.com/banekondic1996/Elve-Terminal/issues"
+    "url": "https://github.com/banekondic1996/Elve-Terminal-VSCode/issues"
   },
-  "homepage": "https://github.com/banekondic1996/Elve-Terminal#readme",
+  "homepage": "https://github.com/banekondic1996/Elve-Terminal-VSCode#readme",
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Other"],
   "keywords": ["terminal", "tabs", "split", "history", "aliases", "xterm"],
@@ -23,7 +23,6 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "elveTerminal.openPanel",      "title": "Elve Terminal: Open" },
       { "command": "elveTerminal.collapseBar",    "title": "Elve: Toggle tab sidebar",  "icon": "$(chevron-right)" },
       { "command": "elveTerminal.password",       "title": "Elve: Quick Password",      "icon": "$(lock)" },
       { "command": "elveTerminal.clear",          "title": "Elve: Clear terminal",      "icon": "$(clear-all)" },

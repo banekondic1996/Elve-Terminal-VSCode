@@ -14,3 +14,12 @@
 - Right-click context menu with package manager shortcuts
 - Optional bottom input box
 - File drag-and-drop to paste paths
+
+## [1.0.1] — Release
+Themeing fixes
+Splitview close buttons added
+Changed to integrating buttons into top bar via VS Code API
+
+## [1.0.2] — Release
+Many bug fixes
+Returned back to using bash history

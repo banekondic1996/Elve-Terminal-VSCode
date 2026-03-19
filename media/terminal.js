@@ -464,14 +464,23 @@
     const pane = document.createElement('div');
     pane.className = 'split-pane';
     pane.style.cssText = 'flex:1;overflow:hidden;position:relative;min-width:0;min-height:0;';
-    pane.addEventListener('click', () => {
+
+    function activatePane() {
       focusedSplit = idx;
-      // Read split.cwd at click time — it may have been updated by getCwd polling since buildPane ran
       const liveSplit = tab.splits[idx];
       const cwdToUse = (liveSplit ? liveSplit.cwd : null) || tab.cwd;
       currentCwd = cwdToUse;
       if (showHistory) conn.send({ type: 'getHistory', cwd: cwdToUse });
-    });
+    }
+
+    pane.addEventListener('click', activatePane);
+
+    // xterm captures pointer events on its canvas, so plain 'click' on the pane
+    // never fires when the user clicks terminal text. Use mousedown on the xterm
+    // screen element (added after term.open()) to catch all clicks including on text.
+    split.term.open(pane);
+    const screen = pane.querySelector('.xterm-screen');
+    if (screen) screen.addEventListener('mousedown', activatePane);
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'split-close-btn';
@@ -479,7 +488,6 @@
     closeBtn.addEventListener('click', e => { e.stopPropagation(); closeSplit(tab, idx); });
     pane.appendChild(closeBtn);
 
-    split.term.open(pane);
     attachKeyGuard(pane, () => split.term);
     tab.wrapper.appendChild(pane);
 
@@ -809,7 +817,9 @@
           settingsPanel.style.display = 'none';
           aliasPanel.style.display = 'none';
           const tab = tabs.find(t => t.id === activeTabId);
-          conn.send({ type: 'getHistory', cwd: tab ? tab.cwd : currentCwd });
+          const split = tab?.splits[focusedSplit] || tab?.splits[0];
+          const cwd = (split ? split.cwd : null) || tab?.cwd || currentCwd;
+          conn.send({ type: 'getHistory', cwd });
         }
         setTimeout(() => { const t=tabs.find(t=>t.id===activeTabId); if(t){fitTab(t);focusTab(t);} }, 100);
         break;
@@ -845,7 +855,9 @@
     }
     if (action === 'create-history-file') {
       const tab = tabs.find(t => t.id === activeTabId);
-      conn.send({ type: 'createHistoryFile', cwd: tab ? tab.cwd : currentCwd });
+      const split = tab?.splits[focusedSplit] || tab?.splits[0];
+      const cwd = (split ? split.cwd : null) || tab?.cwd || currentCwd;
+      conn.send({ type: 'createHistoryFile', cwd });
     }
     if (action === 'collapse-top-bar') toggleSidebar();
     const tab = tabs.find(t=>t.id===activeTabId);
