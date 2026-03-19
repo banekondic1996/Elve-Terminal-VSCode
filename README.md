@@ -2,7 +2,7 @@
 
 A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels.
 
-![Elve Terminal demo](https://raw.githubusercontent.com/banekondic1996/Elve-Terminal-VSCode/media/demo.gif)
+![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
 
 ---
 
