@@ -994,7 +994,7 @@
         if (window.vscode) window.vscode.postMessage({ type:'openExternal', url:'https://www.google.com/search?q='+encodeURIComponent(selectedText) });
         break;
       // History context menu
-      case 'ctx.histExecute':   sendToActive(selectedHistCmd + '\r'); break;
+      case 'ctx.histExecute':   runFromHistory(selectedHistCmd); break;
       case 'ctx.histCopyInput': sendToActive(selectedHistCmd); break;
       case 'ctx.histCopy':
         if (selectedHistCmd && window.vscode) window.vscode.postMessage({ type: 'copyToClipboard', text: selectedHistCmd });
@@ -1069,12 +1069,23 @@
   });
 
   // ── History list events ────────────────────────────────────────────────────
+  // Send a command from the history panel and refresh history after a short delay
+  function runFromHistory(cmd) {
+    sendToActive(cmd + '\r');
+    setTimeout(() => {
+      const tab = tabs.find(t => t.id === activeTabId);
+      if (!tab) return;
+      const split = tab.splits[focusedSplit] || tab.splits[0];
+      const cwd = (split ? split.cwd : null) || tab.cwd || currentCwd;
+      conn.send({ type: 'getHistory', cwd });
+    }, 400);
+  }
+
   historyList.addEventListener('click', e => {
     const item = e.target.closest('.history-item');
     if (!item) return;
     const cmd = item.dataset.command;
-    sendToActive(cmd + '\r');
-    // History will update on next poll / cwd-change; no client-side write needed
+    runFromHistory(cmd);
   });
 
   historyList.addEventListener('contextmenu', e => {
