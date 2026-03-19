@@ -1,4 +1,9 @@
-# Elve Terminal
+# Elve Terminal 
+
+# ToDo:
+<pre>
+  -Fix history, just read bash history or .history file 60 enteries at each enter
+</pre>
 
 # Screenshot </br>
 
