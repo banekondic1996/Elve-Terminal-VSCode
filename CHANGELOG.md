@@ -1,5 +1,5 @@
 # Changelog
-
+<pre>
 ## [1.0.0] — Initial Release
 
 - Collapsible left tab sidebar with hover-to-expand
@@ -33,6 +33,7 @@ Fix bell button not ringing
 
 ## [1.0.5] — Release
 Added option to delete history enteries
+</pre>
 
 
 
