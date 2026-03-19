@@ -1,5 +1,9 @@
 # Elve Terminal
 
+# Screnshot </br>
+
+<img src='screenshot.png'/>
+
 A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels.
 
 ## Features
