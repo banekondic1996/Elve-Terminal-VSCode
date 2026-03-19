@@ -2,7 +2,7 @@
 
 # ToDo:
 <pre>
-  -Fix history, just read bash history or .history file 60 enteries at each enter
+  -Fix history, just read bash history or .history file 60 enteries at each enter. Read whole, take distinct entries, trim to 60 entries 
 </pre>
 
 # Screenshot </br>
