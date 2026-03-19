@@ -51,8 +51,28 @@ async function activate(context) {
     await terminalServer.start();
     statusBar.text = `$(terminal) Elve: ws:${terminalServer.port}`;
     statusBar.tooltip = `Elve Terminal WebSocket on 127.0.0.1:${terminalServer.port}`;
+    // ── Panel toggle button — bottom-right status bar ─────────────────────────
+    // Priority 99 puts it just to the left of the WS status item (100)
+    const panelToggleBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+    panelToggleBar.text = '$(terminal-view-icon)';
+    panelToggleBar.tooltip = 'Toggle Elve Terminal panel';
+    panelToggleBar.command = 'elveTerminal.togglePanel';
+    panelToggleBar.show();
+    context.subscriptions.push(panelToggleBar);
     const provider = new ElveTerminalPanelProvider(context, terminalServer);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(ElveTerminalPanelProvider.viewType, provider, { webviewOptions: { retainContextWhenHidden: true } }));
+    // ── Panel toggle status bar command ──────────────────────────────────────
+    context.subscriptions.push(vscode.commands.registerCommand('elveTerminal.togglePanel', async () => {
+        // If the Elve panel is already visible, toggle the whole panel area off;
+        // otherwise focus/show the Elve panel (which opens the panel area too).
+        const isVisible = webviewView !== null && webviewView.visible;
+        if (isVisible) {
+            await vscode.commands.executeCommand('workbench.action.togglePanel');
+        }
+        else {
+            await vscode.commands.executeCommand(`${ElveTerminalPanelProvider.viewType}.focus`);
+        }
+    }));
     // ── Panel header button commands ─────────────────────────────────────────
     const headerCmds = [
         ['elveTerminal.openPanel', 'openPanel'],

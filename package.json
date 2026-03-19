@@ -2,7 +2,7 @@
   "name": "elve-terminal",
   "displayName": "Elve Terminal",
   "description": "A powerful custom terminal panel with tabs, split views, per-directory history, themes, and aliases",
- "version": "1.0.2",
+  "version": "1.0.4",
   "author": "Bane Kondic",
   "publisher": "ElveApps",
   "license": "MIT",
@@ -130,6 +130,11 @@
       {
         "command": "elveTerminal.ctx.histCopy",
         "title": "Copy"
+      },
+      {
+        "command": "elveTerminal.togglePanel",
+        "title": "Elve: Toggle Panel",
+        "icon": "$(terminal)"
       }
     ],
     "views": {

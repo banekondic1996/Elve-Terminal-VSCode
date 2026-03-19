@@ -164,6 +164,23 @@
   let lastOutputTime = Date.now();
   const IDLE_THRESHOLD_MS = 1500; // fire after 1.5s of silence (prompt redraw is fast)
 
+  // AudioContext must be created/resumed inside a user-gesture call stack.
+  // We create it once on the first click anywhere in the webview, then reuse it.
+  let _audioCtx = null;
+  function getAudioCtx() {
+    if (!_audioCtx) {
+      try { _audioCtx = new AudioContext(); } catch(e) { return null; }
+    }
+    if (_audioCtx.state === 'suspended') {
+      _audioCtx.resume().catch(() => {});
+    }
+    return _audioCtx;
+  }
+  // Prime the AudioContext on first user interaction so it is ready when the bell fires.
+  document.addEventListener('click',    () => getAudioCtx(), { once: false, capture: true });
+  document.addEventListener('keydown',  () => getAudioCtx(), { once: false, capture: true });
+  document.addEventListener('mousedown',() => getAudioCtx(), { once: false, capture: true });
+
   function updateBellIcon() {
     window.vscode?.postMessage({
       type: 'setContext',
@@ -198,19 +215,21 @@
     const tab0 = tabs.find(t => t.id === activeTabId);
     const term0 = (tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term;
     term0?.writeln('\r\n\x1b[31m🔔 Terminal idle — command finished!\x1b[0m');
-    // Play audible beep (two short tones)
+    // Play audible beep (two short tones) using the pre-warmed AudioContext
     try {
-      const actx = new AudioContext();
-      [[880, 0, 0.15], [1100, 0.2, 0.15]].forEach(([freq, start, dur]) => {
-        const osc = actx.createOscillator();
-        const gain = actx.createGain();
-        osc.connect(gain); gain.connect(actx.destination);
-        osc.type = 'sine'; osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.4, actx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + start + dur);
-        osc.start(actx.currentTime + start);
-        osc.stop(actx.currentTime + start + dur + 0.05);
-      });
+      const actx = getAudioCtx();
+      if (actx) {
+        [[880, 0, 0.15], [1100, 0.2, 0.15]].forEach(([freq, start, dur]) => {
+          const osc = actx.createOscillator();
+          const gain = actx.createGain();
+          osc.connect(gain); gain.connect(actx.destination);
+          osc.type = 'sine'; osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.4, actx.currentTime + start);
+          gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + start + dur);
+          osc.start(actx.currentTime + start);
+          osc.stop(actx.currentTime + start + dur + 0.05);
+        });
+      }
     } catch(e){}
     if (bellResetTimer) clearTimeout(bellResetTimer);
     bellResetTimer = setTimeout(() => {
