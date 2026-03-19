@@ -958,7 +958,15 @@
         const tab = tabs.find(t => t.id === activeTabId);
         if (!tab) break;
         const terms = tab.splits.length ? tab.splits.map(s => s.term) : [tab.term];
-        terms.forEach(t => { try { t.scrollToBottom(); } catch(e){} });
+        terms.forEach(t => {
+          try {
+            t.scrollToBottom();
+            // Also force the DOM viewport directly in case xterm's internal
+            // scroll position is out of sync after the webview was hidden
+            const vp = t.element?.querySelector('.xterm-viewport');
+            if (vp) vp.scrollTop = vp.scrollHeight;
+          } catch(e){}
+        });
         break;
       }
 

@@ -138,10 +138,13 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
 
     view.webview.html = this.buildHtml(view.webview, mediaUri);
 
-    // When the panel tab becomes visible again, tell the webview to scroll to bottom
+    // When the panel becomes visible again, scroll to bottom.
+    // Small delay so the webview has re-painted before we scroll.
     view.onDidChangeVisibility(() => {
       if (view.visible) {
-        view.webview.postMessage({ type: 'hostCommand', cmd: 'scrollToBottom' });
+        setTimeout(() => {
+          view.webview.postMessage({ type: 'hostCommand', cmd: 'scrollToBottom' });
+        }, 100);
       }
     });
 
