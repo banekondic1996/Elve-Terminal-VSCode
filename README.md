@@ -1,13 +1,7 @@
 # Elve Terminal
 
-A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels. </br> </br>
-Download: [Link](https://marketplace.visualstudio.com/items?itemName=ElveApps.elve-terminal)
-</br> </br>
-**ToDo:**
-<pre>
--Add option to list original bash history even if directory has .history file
-</pre>
-**Screenshot:**
+A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels.
+
 ![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
 
 ---
@@ -39,10 +33,7 @@ All controls live in the VS Code panel header — no extra toolbar cluttering yo
 
 | Button | Action |
 |--------|--------|
-| › (chevron) | Toggle the tab sidebar |
-| 🔒 | Quick Password — saves a password for fast `sudo` access |
 | 🗑 | Clear the terminal |
-| ✕ | Clear the current line (Ctrl+U) |
 | ⏹ | Kill the current process (Ctrl+C) |
 | ⟳ | Toggle history sidebar |
 | ⋯ | Open submenu (Aliases, Settings, Create history file) |

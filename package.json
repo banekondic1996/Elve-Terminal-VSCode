@@ -2,7 +2,7 @@
   "name": "elve-terminal",
   "displayName": "Elve Terminal",
   "description": "A powerful custom terminal panel with tabs, split views, per-directory history, themes, and aliases",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "Bane Kondic",
   "publisher": "ElveApps",
   "license": "MIT",
@@ -92,6 +92,18 @@
         "title": "Paste"
       },
       {
+        "command": "elveTerminal.ctx.clearLine",
+        "title": "Clear Line"
+      },
+      {
+        "command": "elveTerminal.ctx.clear",
+        "title": "Clear Terminal"
+      },
+      {
+        "command": "elveTerminal.ctx.kill",
+        "title": "Kill Terminal"
+      },
+      {
         "command": "elveTerminal.ctx.splitH",
         "title": "Split Horizontal"
       },
@@ -150,44 +162,29 @@
     "menus": {
       "view/title": [
         {
-          "command": "elveTerminal.collapseBar",
+          "command": "elveTerminal.bell",
           "when": "view == elveTerminal.panel",
           "group": "navigation@1"
         },
         {
-          "command": "elveTerminal.password",
+          "command": "elveTerminal.clear",
           "when": "view == elveTerminal.panel",
           "group": "navigation@2"
         },
         {
-          "command": "elveTerminal.bell",
+          "command": "elveTerminal.kill",
           "when": "view == elveTerminal.panel",
           "group": "navigation@3"
         },
         {
-          "command": "elveTerminal.clear",
+          "command": "elveTerminal.toggleHistory",
           "when": "view == elveTerminal.panel",
           "group": "navigation@4"
         },
         {
-          "command": "elveTerminal.clearLine",
-          "when": "view == elveTerminal.panel",
-          "group": "navigation@5"
-        },
-        {
-          "command": "elveTerminal.kill",
-          "when": "view == elveTerminal.panel",
-          "group": "navigation@6"
-        },
-        {
-          "command": "elveTerminal.toggleHistory",
-          "when": "view == elveTerminal.panel",
-          "group": "navigation@7"
-        },
-        {
           "command": "elveTerminal.menu",
           "when": "view == elveTerminal.panel",
-          "group": "navigation@8"
+          "group": "navigation@5"
         }
       ],
       "webview/context": [
@@ -200,6 +197,21 @@
           "command": "elveTerminal.ctx.paste",
           "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
           "group": "1_terminal@2"
+        },
+        {
+          "command": "elveTerminal.ctx.clearLine",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
+          "group": "1_terminal@3"
+        },
+        {
+          "command": "elveTerminal.ctx.clear",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
+          "group": "1_terminal@4"
+        },
+        {
+          "command": "elveTerminal.ctx.kill",
+          "when": "webviewId == 'elveTerminal.panel' && webviewSection == 'terminal'",
+          "group": "1_terminal@5"
         },
         {
           "command": "elveTerminal.ctx.splitH",

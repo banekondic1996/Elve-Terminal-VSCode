@@ -149,6 +149,7 @@
     showInputBox: false,
     neverCollapseSidebar: false,
     autoCollapseHistory: false,
+    accentColor: '',          // '' = use theme default
     ctrlVPaste: false,
     panelContrast: 0,  // -50 = darker, +50 = lighter
   };
@@ -203,7 +204,7 @@
       // Print confirmation in the active terminal
       const tab0 = tabs.find(t => t.id === activeTabId);
       const term0 = (tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term;
-      term0?.writeln('\r\n\x1b[32m🔔 Monitoring started — will beep when terminal goes idle.\x1b[0m');
+      term0?.writeln('\r\n\x1b[32m Monitoring started — will beep when terminal goes idle.\x1b[0m');
     }
   }
 
@@ -216,7 +217,7 @@
     // Print in terminal
     const tab0 = tabs.find(t => t.id === activeTabId);
     const term0 = (tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term;
-    term0?.writeln('\r\n\x1b[31m🔔 Terminal idle — command finished!\x1b[0m');
+    term0?.writeln('\r\n\x1b[31m Terminal idle — command finished!\x1b[0m');
     // Play audible beep (two short tones) using the pre-warmed AudioContext
     try {
       const actx = getAudioCtx();
@@ -245,7 +246,7 @@
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
   const tabsContainer  = $('tabs-container');
-  const termArea       = $('terminal-area');
+  const termArea       = $('terminal-panes');
   const historySidebar = $('history-sidebar');
   const historyList    = $('history-list');
   const settingsPanel  = $('settings-panel');
@@ -268,6 +269,7 @@
     setC('never-collapse-sidebar', settings.neverCollapseSidebar);
     setC('auto-collapse-history', settings.autoCollapseHistory);
     setC('ctrl-v-paste', settings.ctrlVPaste);
+    set('accent-color', settings.accentColor || '#58a6ff');
     const lbl = (id, v) => { const el=$(id); if(el) el.textContent=v; };
     lbl('font-size-value', settings.fontSize);
     lbl('hue-value', settings.colorHue);
@@ -326,6 +328,11 @@
           document.documentElement.style.setProperty(v, adjustColor(cur, 0, 100 + shift, 100));
       };
       adjustVar('--ui-bg'); adjustVar('--ui-bg2'); adjustVar('--ui-border');
+    }
+
+    // Custom accent color — overrides whatever the theme set
+    if (settings.accentColor) {
+      document.documentElement.style.setProperty('--ui-accent', settings.accentColor);
     }
 
     const termTheme = buildTermTheme();
@@ -494,13 +501,12 @@
       el.appendChild(icon);
       el.appendChild(label);
 
-      if (tabs.length > 1) {
-        const x = document.createElement('button');
-        x.className = 'tab-item-close';
-        x.textContent = '✕';
-        x.addEventListener('click', e => { e.stopPropagation(); closeTab(tab.id); });
-        el.appendChild(x);
-      }
+      const x = document.createElement('button');
+      x.className = 'tab-item-close';
+      x.innerHTML = '&#x1F5D1;';
+      x.title = 'Kill tab';
+      x.addEventListener('click', e => { e.stopPropagation(); closeTab(tab.id); });
+      el.appendChild(x);
 
       el.addEventListener('click', () => switchTab(tab.id));
       tab.el = el;
@@ -654,7 +660,6 @@
   }
 
   function closeTab(id) {
-    if (tabs.length === 1) return;
     const idx = tabs.findIndex(t => t.id === id);
     const tab = tabs[idx];
     if (!tab) return;
@@ -668,7 +673,11 @@
     tab.splits.forEach(s => { try { s.term.dispose(); } catch(e){} });
     tabs.splice(idx, 1);
     activeTabId = null;
-    switchTab(tabs[Math.max(0, idx - 1)].id);
+    if (tabs.length === 0) {
+      addTab(INITIAL_CWD);
+    } else {
+      switchTab(tabs[Math.max(0, idx - 1)].id);
+    }
   }
 
   function splitTerminal(tab, dir) {
@@ -996,6 +1005,19 @@
       }
       case 'ctx.splitH': { const t2=tabs.find(t=>t.id===activeTabId); if(t2) splitTerminal(t2,'horizontal'); break; }
       case 'ctx.splitV': { const t2=tabs.find(t=>t.id===activeTabId); if(t2) splitTerminal(t2,'vertical'); break; }
+      case 'ctx.clearLine': sendToActive('\x15'); break;
+      case 'ctx.clear': {
+        const tabC = tabs.find(t => t.id === activeTabId); if (!tabC) break;
+        const sidC = (tabC.splits[focusedSplit]||tabC.splits[0])?.sid || tabC.sid;
+        const termC = (tabC.splits[focusedSplit]||tabC.splits[0])?.term || tabC.term;
+        conn.send({ type:'input', id:sidC, data:'\x03' });
+        setTimeout(() => { termC.clear(); termC.focus(); }, 100);
+        break;
+      }
+      case 'ctx.kill': {
+        if (activeTabId !== null) closeTab(activeTabId);
+        break;
+      }
       case 'ctx.pacman': execCmd('sudo pacman -S ' + selectedText); break;
       case 'ctx.yay':    execCmd('yay -S ' + selectedText); break;
       case 'ctx.apt':    execCmd('sudo apt-get install ' + selectedText); break;
@@ -1181,6 +1203,13 @@
     settings.autoCollapseHistory = e.target.checked; saveSettings();
     historySidebar.classList.toggle('auto-collapse', e.target.checked);
     setTimeout(() => { const t=tabs.find(t=>t.id===activeTabId); if(t){fitTab(t);focusTab(t);} }, 200);
+  });
+  $('accent-color').addEventListener('input', e => {
+    settings.accentColor = e.target.value; saveSettings(); applyTheme();
+  });
+  $('accent-reset').addEventListener('click', () => {
+    settings.accentColor = ''; saveSettings(); applyTheme();
+    const el = $('accent-color'); if (el) el.value = '#58a6ff';
   });
 
   // ── Bottom input ───────────────────────────────────────────────────────────

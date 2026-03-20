@@ -55,11 +55,8 @@ export async function activate(context: vscode.ExtensionContext) {
   // ── Panel header button commands ─────────────────────────────────────────
   const headerCmds: [string, string][] = [
     ['elveTerminal.openPanel',     'openPanel'],
-    ['elveTerminal.collapseBar',   'collapseBar'],
-    ['elveTerminal.password',      'password'],
     ['elveTerminal.bell',          'bell'],
     ['elveTerminal.clear',         'clear'],
-    ['elveTerminal.clearLine',     'clearLine'],
     ['elveTerminal.kill',          'kill'],
     ['elveTerminal.toggleHistory', 'toggleHistory'],
     ['elveTerminal.menu',          'menu'],
@@ -80,6 +77,9 @@ export async function activate(context: vscode.ExtensionContext) {
   const ctxCmds: [string, string][] = [
     ['elveTerminal.ctx.copy',          'ctx.copy'],
     ['elveTerminal.ctx.paste',         'ctx.paste'],
+    ['elveTerminal.ctx.clearLine',     'ctx.clearLine'],
+    ['elveTerminal.ctx.clear',         'ctx.clear'],
+    ['elveTerminal.ctx.kill',          'ctx.kill'],
     ['elveTerminal.ctx.splitH',        'ctx.splitH'],
     ['elveTerminal.ctx.splitV',        'ctx.splitV'],
     ['elveTerminal.ctx.pacman',        'ctx.pacman'],
@@ -160,12 +160,13 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'copyToClipboard') {
         await vscode.env.clipboard.writeText(msg.text);
       }
-      // Bell armed — show notification
+      // Bell armed/fired — handled silently (audio + terminal text only)
+     // Bell armed — show notification
       if (msg.type === 'bellArmed') {
-        vscode.window.showInformationMessage('🔔 Elve: monitoring started — will beep when terminal goes idle.');
+        vscode.window.showInformationMessage('Elve: monitoring started — will beep when terminal goes idle.');
       }
       if (msg.type === 'bellFired') {
-        vscode.window.showInformationMessage('🔔 Elve: terminal finished!');
+        vscode.window.showInformationMessage('Elve: terminal finished!');
       }
     });
   }
@@ -213,7 +214,14 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
 
     <!-- Terminal area — gives the right-click context its webviewSection -->
     <div class="terminal-area" id="terminal-area"
-         data-vscode-context='{"webviewSection":"terminal","preventDefaultContextMenuItems":true}'></div>
+         data-vscode-context='{"webviewSection":"terminal","preventDefaultContextMenuItems":true}'>
+      <!-- Tab wrappers are appended here, above the input box -->
+      <div id="terminal-panes" style="flex:1;overflow:hidden;position:relative;min-height:0;"></div>
+      <!-- Bottom input box — lives inside terminal column, not full-width -->
+      <div class="input-box-container" id="input-box-container" style="display:none;">
+        <input type="text" id="bottom-input" class="bottom-input" placeholder="Type to send to terminal...">
+      </div>
+    </div>
 
     <!-- History sidebar -->
     <div class="history-sidebar" id="history-sidebar" style="display:none;">
@@ -276,6 +284,13 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
           <input type="range" id="panel-contrast" min="-50" max="50" value="0">
         </div>
         <div class="setting-group">
+          <label>Accent color</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="color" id="accent-color" value="#58a6ff" style="width:36px;height:28px;border:1px solid var(--ui-border);border-radius:4px;background:none;cursor:pointer;padding:2px;">
+            <button id="accent-reset" style="flex:1;padding:4px 8px;background:var(--ui-border);border:1px solid #30363d;border-radius:3px;color:var(--ui-fg);font-size:11px;cursor:pointer;">Reset</button>
+          </div>
+        </div>
+        <div class="setting-group">
           <label><input type="checkbox" id="show-input-box"> Bottom input box</label>
         </div>
         <div class="setting-group">
@@ -306,11 +321,6 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
     </div>
 
   </div><!-- end main-content -->
-
-  <!-- Bottom input box -->
-  <div class="input-box-container" id="input-box-container" style="display:none;">
-    <input type="text" id="bottom-input" class="bottom-input" placeholder="Type to send to terminal...">
-  </div>
 
 </div><!-- end terminal-container -->
 

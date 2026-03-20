@@ -8,8 +8,8 @@
   --ui-border:   #21262d;
   --ui-fg:       #c9d1d9;
   --ui-accent:   #58a6ff;
-  --sidebar-rail: 28px;   /* collapsed width — just the icon bullet */
-  --sidebar-open: 180px;  /* expanded width */
+  --sidebar-rail: 28px;
+  --sidebar-open: 180px;
   --history-rail: 28px;
   --history-open: 300px;
 }
@@ -125,15 +125,16 @@ body {
 
 .tab-item-close {
   background: none; border: none; color: inherit; cursor: pointer;
-  padding: 0 2px; font-size: 11px; opacity: 0;
+  padding: 0 2px; font-size: 13px; opacity: 0;
   transition: opacity 0.12s; flex-shrink: 0; line-height: 1;
 }
-.tab-item:hover .tab-item-close { opacity: 0.5; }
+.tab-item:hover .tab-item-close { opacity: 0.45; }
 .tab-item-close:hover { opacity: 1 !important; color: #f85149; }
 
 /* ── Terminal area ───────────────────────────────────────────────────────── */
-.terminal-area   { flex:1; overflow:hidden; position:relative; }
-.terminal-wrapper { width:100%; height:100%; padding:6px; box-sizing:border-box; }
+.terminal-area   { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+#terminal-panes  { flex:1; overflow:hidden; position:relative; min-height:0; }
+.terminal-wrapper { position:absolute; inset:0; padding:6px; box-sizing:border-box; }
 /* Let xterm fill the padded wrapper exactly, scrollbar stays inside */
 .terminal-wrapper .xterm { height:100%; width:100%; }
 .terminal-wrapper .xterm-screen   { position:relative; z-index:2; }
@@ -155,7 +156,7 @@ body {
   max-width: 600px;
 }
 
-/* Auto-collapse history sidebar — same behaviour as tab sidebar */
+/* Auto-collapse history sidebar — mirrors tab sidebar behaviour */
 .history-sidebar.auto-collapse {
   width: var(--history-rail) !important;
   min-width: unset;
@@ -347,7 +348,7 @@ body {
 .split-resize-handle:hover,
 .split-resize-handle:active { background:var(--ui-accent); }
 
-/* ── Bottom input (in flex column, pushes terminal up) ───────────────────── */
+/* ── Bottom input (inside terminal column, not full-width) ───────────────── */
 .input-box-container {
   height: 36px; flex-shrink: 0;
   background: var(--ui-bg); border-top: 1px solid var(--ui-border);
