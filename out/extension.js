@@ -144,6 +144,15 @@ class ElveTerminalPanelProvider {
             localResourceRoots: [mediaUri]
         };
         view.webview.html = this.buildHtml(view.webview, mediaUri);
+        // When the panel becomes visible again, scroll to bottom.
+        // Small delay so the webview has re-painted before we scroll.
+        view.onDidChangeVisibility(() => {
+            if (view.visible) {
+                setTimeout(() => {
+                    view.webview.postMessage({ type: 'hostCommand', cmd: 'scrollToBottom' });
+                }, 100);
+            }
+        });
         // Handle messages from the webview
         view.webview.onDidReceiveMessage(async (msg) => {
             if (msg.type === 'openExternal') {
@@ -263,10 +272,17 @@ class ElveTerminalPanelProvider {
           <input type="range" id="saturation" min="0" max="200" value="100">
         </div>
         <div class="setting-group">
+          <label>Panel contrast: <span id="contrast-value">0</span></label>
+          <input type="range" id="panel-contrast" min="-50" max="50" value="0">
+        </div>
+        <div class="setting-group">
           <label><input type="checkbox" id="show-input-box"> Bottom input box</label>
         </div>
         <div class="setting-group">
           <label><input type="checkbox" id="never-collapse-sidebar"> Never collapse tab sidebar</label>
+        </div>
+        <div class="setting-group">
+          <label><input type="checkbox" id="auto-collapse-history"> Auto-collapse history panel</label>
         </div>
         <div class="setting-group">
           <label><input type="checkbox" id="ctrl-v-paste"> Use Ctrl+V to paste</label>

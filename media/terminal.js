@@ -148,6 +148,7 @@
     saturation: 100,
     showInputBox: false,
     neverCollapseSidebar: false,
+    autoCollapseHistory: false,
     ctrlVPaste: false,
     panelContrast: 0,  // -50 = darker, +50 = lighter
   };
@@ -265,6 +266,7 @@
     set('saturation', settings.saturation);
     setC('show-input-box', settings.showInputBox);
     setC('never-collapse-sidebar', settings.neverCollapseSidebar);
+    setC('auto-collapse-history', settings.autoCollapseHistory);
     setC('ctrl-v-paste', settings.ctrlVPaste);
     const lbl = (id, v) => { const el=$(id); if(el) el.textContent=v; };
     lbl('font-size-value', settings.fontSize);
@@ -1024,6 +1026,7 @@
         showHistory = !showHistory;
         historySidebar.style.display = showHistory ? 'flex' : 'none';
         if (showHistory) {
+          if (settings.autoCollapseHistory) historySidebar.classList.add('auto-collapse');
           settingsPanel.style.display = 'none';
           aliasPanel.style.display = 'none';
           const tab = tabs.find(t => t.id === activeTabId);
@@ -1174,6 +1177,11 @@
   $('ctrl-v-paste').addEventListener('change', e => {
     settings.ctrlVPaste = e.target.checked; saveSettings();
   });
+  $('auto-collapse-history').addEventListener('change', e => {
+    settings.autoCollapseHistory = e.target.checked; saveSettings();
+    historySidebar.classList.toggle('auto-collapse', e.target.checked);
+    setTimeout(() => { const t=tabs.find(t=>t.id===activeTabId); if(t){fitTab(t);focusTab(t);} }, 200);
+  });
 
   // ── Bottom input ───────────────────────────────────────────────────────────
   let lastInputVal = '';
@@ -1196,6 +1204,9 @@
     sidebarCollapsed = false;
     tabSidebar.classList.remove('collapsed');
     tabSidebar.classList.add('pinned');
+  }
+  if (settings.autoCollapseHistory) {
+    historySidebar.classList.add('auto-collapse');
   }
 
   function tryBoot() {

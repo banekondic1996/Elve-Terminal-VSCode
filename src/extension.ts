@@ -282,6 +282,9 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
           <label><input type="checkbox" id="never-collapse-sidebar"> Never collapse tab sidebar</label>
         </div>
         <div class="setting-group">
+          <label><input type="checkbox" id="auto-collapse-history"> Auto-collapse history panel</label>
+        </div>
+        <div class="setting-group">
           <label><input type="checkbox" id="ctrl-v-paste"> Use Ctrl+V to paste</label>
         </div>
       </div>

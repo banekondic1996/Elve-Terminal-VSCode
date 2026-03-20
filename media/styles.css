@@ -10,6 +10,8 @@
   --ui-accent:   #58a6ff;
   --sidebar-rail: 28px;   /* collapsed width — just the icon bullet */
   --sidebar-open: 180px;  /* expanded width */
+  --history-rail: 28px;
+  --history-open: 300px;
 }
 
 body {
@@ -151,6 +153,18 @@ body {
   position: relative;
   min-width: 180px;
   max-width: 600px;
+}
+
+/* Auto-collapse history sidebar — same behaviour as tab sidebar */
+.history-sidebar.auto-collapse {
+  width: var(--history-rail) !important;
+  min-width: unset;
+  opacity: 0.2;
+  transition: width 0.18s ease, opacity 0.18s ease;
+}
+.history-sidebar.auto-collapse:hover {
+  width: var(--history-open) !important;
+  opacity: 1;
 }
 
 /* Drag-resize grip on the left edge */
