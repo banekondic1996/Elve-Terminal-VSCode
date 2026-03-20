@@ -1,14 +1,16 @@
-# Elve Terminal
+# Elve Terminal Experimental
+
+This branch is trying to improve input response and other features of terminal.
 
 A powerful terminal panel for Visual Studio Code — history panel, tabs, split views, alerts, per-directory history, themes, and aliases.
 
 ![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
 
+
 **To do:**
 <pre>
-  -Improve text input response
+  -Input response trick, by drawing fake input bar over the input line
 </pre>
-
 ---
 
 ## Features
