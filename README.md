@@ -1,12 +1,21 @@
 # Elve Terminal
 
-A powerful terminal panel for Visual Studio Code — tabs, split views, per-directory history, themes, and aliases, all living right next to your **Terminal**, **Output**, and **Problems** panels.
+A powerful terminal panel for Visual Studio Code — history panel, tabs, split views, alerts, per-directory history, themes, and aliases.
 
 ![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
 
 ---
 
 ## Features
+
+### History panel
+A sidebar panel on the right that lists all your commands from history, distinct commands are shown only, and 60 enteries.
+You can delete commands from history or click to execute them. You can turn on auto collapse of this panel. If you have 
+.history file in project directory it will list commands from that history.
+
+### Monitoring mode (Alert on idle notification)
+Clicking bell icon in top bar will trigger monitoring mode, which will notify you when terminal goes idle.
+Useful if you are building something and waiting for process to finish, just click bell icon, and when it finishes it will notify you.
 
 ### Tabs
 A collapsible sidebar on the left lists all your open terminal tabs. Hover to expand it, click a tab to switch, and use the **+** row at the bottom to open a new one. Each tab tracks its current directory and updates its label automatically.
@@ -33,8 +42,9 @@ All controls live in the VS Code panel header — no extra toolbar cluttering yo
 
 | Button | Action |
 |--------|--------|
-| 🗑 | Clear the terminal |
 | ⏹ | Kill the current process (Ctrl+C) |
+| 🗑 | Clear the terminal |
+| 🔔 | Alert on idle |
 | ⟳ | Toggle history sidebar |
 | ⋯ | Open submenu (Aliases, Settings, Create history file) |
 
@@ -97,6 +107,4 @@ Then use **Menu → Create history file** inside Elve to create a `.history` fil
 ## Tips
 
 - Add `.history` to your global `.gitignore` to avoid committing per-directory history files.
-- Right-click the 🔒 button to update a saved password.
-- The tab sidebar collapses to a thin 28 px rail — hover to peek, click the **›** button to hide it fully.
 - In split view, click anywhere in a pane (even on text) to switch focus and update the history panel.
