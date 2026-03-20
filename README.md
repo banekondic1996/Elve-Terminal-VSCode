@@ -5,7 +5,7 @@ Download: [Link](https://marketplace.visualstudio.com/items?itemName=ElveApps.el
 </br> </br>
 **ToDo:**
 <pre>
-
+-Add option to list original bash history even if directory has .history file
 </pre>
 **Screenshot:**
 ![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
