@@ -82,10 +82,7 @@ export async function activate(context: vscode.ExtensionContext) {
     ['elveTerminal.ctx.kill',          'ctx.kill'],
     ['elveTerminal.ctx.splitH',        'ctx.splitH'],
     ['elveTerminal.ctx.splitV',        'ctx.splitV'],
-    ['elveTerminal.ctx.pacman',        'ctx.pacman'],
-    ['elveTerminal.ctx.yay',           'ctx.yay'],
-    ['elveTerminal.ctx.apt',           'ctx.apt'],
-    ['elveTerminal.ctx.dnf',           'ctx.dnf'],
+    ['elveTerminal.ctx.install',       'ctx.install'],
     ['elveTerminal.ctx.search',        'ctx.search'],
     ['elveTerminal.ctx.histExecute',   'ctx.histExecute'],
     ['elveTerminal.ctx.histCopyInput', 'ctx.histCopyInput'],
@@ -161,12 +158,7 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
         await vscode.env.clipboard.writeText(msg.text);
       }
       // Bell armed/fired — handled silently (audio + terminal text only)
-       if (msg.type === 'bellArmed') {
-        vscode.window.showInformationMessage('Elve: monitoring started — will beep when terminal goes idle.');
-      }
-      if (msg.type === 'bellFired') {
-        vscode.window.showInformationMessage('Elve: terminal finished!');
-      }
+      if (msg.type === 'bellArmed' || msg.type === 'bellFired') { /* no-op */ }
     });
   }
 
@@ -215,12 +207,8 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
     <!-- Terminal area — gives the right-click context its webviewSection -->
     <div class="terminal-area" id="terminal-area"
          data-vscode-context='{"webviewSection":"terminal","preventDefaultContextMenuItems":true}'>
-      <!-- Tab wrappers are appended here, above the input box -->
+      <!-- Tab wrappers are appended here; each gets its own .pane-input-bar -->
       <div id="terminal-panes" style="flex:1;overflow:hidden;position:relative;min-height:0;"></div>
-      <!-- Bottom input box — lives inside terminal column, not full-width -->
-      <div class="input-box-container" id="input-box-container" style="display:none;">
-        <input type="text" id="bottom-input" class="bottom-input" placeholder="Type to send to terminal...">
-      </div>
     </div>
 
     <!-- History sidebar -->
@@ -301,6 +289,15 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
         </div>
         <div class="setting-group">
           <label><input type="checkbox" id="ctrl-v-paste"> Use Ctrl+V to paste</label>
+        </div>
+        <div class="setting-group">
+          <label>Install command</label>
+          <select id="package-manager">
+            <option value="pacman">pacman</option>
+            <option value="yay">yay</option>
+            <option value="apt">apt-get</option>
+            <option value="dnf">dnf</option>
+          </select>
         </div>
       </div>
     </div>

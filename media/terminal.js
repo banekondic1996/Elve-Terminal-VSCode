@@ -157,9 +157,10 @@
     neverCollapseSidebar: false,
     sidebarWidth: 180,
     autoCollapseHistory: false,
-    accentColor: '',          // '' = use theme default
+    accentColor: '',
     ctrlVPaste: false,
-    panelContrast: 0,  // -50 = darker, +50 = lighter
+    panelContrast: 0,
+    packageManager: 'pacman',
   };
   try {
     const saved = JSON.parse(localStorage.getItem('elveSettings') || '{}');
@@ -212,7 +213,7 @@
       // Print confirmation in the active terminal
       const tab0 = tabs.find(t => t.id === activeTabId);
       const term0 = (tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term;
-      term0?.writeln('\r\n\x1b[32m Monitoring started — will beep when terminal goes idle.\x1b[0m');
+      term0?.writeln('\r\n\x1b[32m🔔 Monitoring started — will beep when terminal goes idle.\x1b[0m');
     }
   }
 
@@ -225,7 +226,7 @@
     // Print in terminal
     const tab0 = tabs.find(t => t.id === activeTabId);
     const term0 = (tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term;
-    term0?.writeln('\r\n\x1b[31m Terminal idle — command finished!\x1b[0m');
+    term0?.writeln('\r\n\x1b[31m🔔 Terminal idle — command finished!\x1b[0m');
     // Play audible beep (two short tones) using the pre-warmed AudioContext
     try {
       const actx = getAudioCtx();
@@ -278,6 +279,7 @@
     setC('auto-collapse-history', settings.autoCollapseHistory);
     setC('ctrl-v-paste', settings.ctrlVPaste);
     set('accent-color', settings.accentColor || '#58a6ff');
+    set('package-manager', settings.packageManager || 'pacman');
     const lbl = (id, v) => { const el=$(id); if(el) el.textContent=v; };
     lbl('font-size-value', settings.fontSize);
     lbl('hue-value', settings.colorHue);
@@ -543,12 +545,14 @@
       tab.wrapper = document.createElement('div');
       tab.wrapper.className = 'terminal-wrapper';
       if (tab.splits.length > 0) {
-        tab.wrapper.style.cssText = 'width:100%;height:100%;display:flex;flex-direction:' + (tab.splitDir === 'horizontal' ? 'column' : 'row');
+        tab.wrapper.style.display = 'flex';
+        tab.wrapper.style.flexDirection = tab.splitDir === 'horizontal' ? 'column' : 'row';
         tab.splits.forEach((split, idx) => buildPane(tab, split, idx));
       } else {
-        tab.wrapper.style.cssText = 'width:100%;height:100%;';
         tab.term.open(tab.wrapper);
         attachKeyGuard(tab.wrapper, () => tab.term);
+        // Per-pane input bar for non-split tab
+        createPaneBar(tab.wrapper, () => tab.term, () => tab.sid);
       }
       termArea.appendChild(tab.wrapper);
       tab.wrapper.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
@@ -581,8 +585,12 @@
     if (showHistory) conn.send({ type: 'getHistory', cwd: tab.cwd });
 
     setTimeout(() => {
-      focusTab(tab);
       fitTab(tab);
+      if (settings.showInputBox) {
+        const bar = tab.wrapper?.querySelector('.pane-input-bar');
+        if (bar && bar._focus) { bar._focus(); return; }
+      }
+      focusTab(tab);
     }, 60);
   }
 
@@ -608,6 +616,9 @@
     split.term.open(pane);
     const screen = pane.querySelector('.xterm-screen');
     if (screen) screen.addEventListener('mousedown', activatePane);
+
+    // Per-pane input bar
+    createPaneBar(pane, () => split.term, () => split.sid);
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'split-close-btn';
@@ -724,16 +735,63 @@
     return tabs.find(t => t.sid === sid || t.splits.some(s => s.sid === sid));
   }
 
+  // Track which sids we've already parsed user@host from
+  const _parsedUserHost = new Set();
+
   conn.on('output', msg => {
     const tab = findTabBySid(msg.id);
     if (!tab) return;
     const split = tab.splits.find(s => s.sid === msg.id);
     const term = split ? split.term : tab.term;
+
+    // ── TUI detection ─────────────────────────────────────────────────────
+    // \x1b[?1049h / \x1b[?47h = alternate screen enter (nano, vim, htop…)
+    // \x1b[2J = erase display — used by top, some htop builds, etc.
+    const d = msg.data;
+    if (d.includes('\x1b[?1049h') || d.includes('\x1b[?47h') ||
+        (d.includes('\x1b[2J') && d.includes('\x1b[H'))) {
+      setTuiMode(true);
+    } else if (d.includes('\x1b[?1049l') || d.includes('\x1b[?47l')) {
+      setTuiMode(false);
+    }
+
     if (term) term.write(msg.data);
     const fn = split ? split.onOutputData : tab.onOutputData;
     if (fn) fn(msg.data);
-    // Bell idle detection: any output resets the idle timer.
-    // When output stops for IDLE_THRESHOLD_MS, the bell fires.
+
+    // ── Fire one-shot output captures (for Tab/Arrow sync) ─────────────────
+    const captures = _outputCaptures.get(msg.id);
+    if (captures && captures.length > 0) {
+      const cb = captures.shift();
+      if (captures.length === 0) _outputCaptures.delete(msg.id);
+      // Give xterm a tick to render the data before reading the buffer
+      setTimeout(() => cb(msg.data), 16);
+    }
+
+    // ── One-time user@host parse from first shell prompt ──────────────────
+    if (!_parsedUserHost.has(msg.id) && term) {
+      setTimeout(() => {
+        try {
+          const buf  = term.buffer.active;
+          const line = buf.getLine(buf.cursorY);
+          if (!line) return;
+          const raw  = line.translateToString(true);
+          const sep  = Math.max(raw.lastIndexOf('$ '), raw.lastIndexOf('# '));
+          if (sep < 0) return;
+          const promptStr  = raw.slice(0, sep);
+          const colonIdx   = promptStr.lastIndexOf(':');
+          const userhost   = colonIdx >= 0 ? promptStr.slice(0, colonIdx).trim() : promptStr.trim();
+          if (!userhost) return;
+          _parsedUserHost.add(msg.id);
+          // Set user@host on every bar associated with this term
+          document.querySelectorAll('.pane-input-bar').forEach(bar => {
+            if (bar._setUser) bar._setUser(userhost);
+          });
+        } catch(e) {}
+      }, 100);
+    }
+
+    // Bell idle detection
     if (bellArmed) {
       clearTimeout(window._bellIdleTimer);
       window._bellIdleTimer = setTimeout(() => {
@@ -749,6 +807,8 @@
     if (split) { split.cwd = msg.cwd; }
     else { tab.cwd = msg.cwd; tab.name = cwdName(msg.cwd); renderTabSidebar(); }
     conn.send({ type:'getHistory', cwd: msg.cwd });
+    // Set initial path on the bar — delay slightly to ensure bar is in DOM
+    setTimeout(() => updatePromptPath(msg.cwd, msg.id), 50);
   });
 
   conn.on('cwd', msg => {
@@ -762,6 +822,7 @@
       // Only update currentCwd and history if this is the active tab's focused split
       if (tab.id === activeTabId && splitIdx === focusedSplit) {
         currentCwd = msg.cwd;
+        updatePromptPath(msg.cwd, msg.id);
         if (showHistory) conn.send({ type: 'getHistory', cwd: msg.cwd });
       }
     } else {
@@ -776,6 +837,7 @@
       renderTabSidebar();
       if (tab.id === activeTabId) {
         currentCwd = msg.cwd;
+        updatePromptPath(msg.cwd, msg.id);
         // Only refresh history if no splits, or if split[0] is focused
         const isFocused = tab.splits.length === 0 || focusedSplit === 0;
         if (isFocused && showHistory) conn.send({ type: 'getHistory', cwd: msg.cwd });
@@ -1060,10 +1122,12 @@
         if (activeTabId !== null) closeTab(activeTabId);
         break;
       }
-      case 'ctx.pacman': execCmd('sudo pacman -S ' + selectedText); break;
-      case 'ctx.yay':    execCmd('yay -S ' + selectedText); break;
-      case 'ctx.apt':    execCmd('sudo apt-get install ' + selectedText); break;
-      case 'ctx.dnf':    execCmd('sudo dnf install ' + selectedText); break;
+      case 'ctx.install': {
+        const pm = settings.packageManager || 'pacman';
+        const cmds = { pacman: 'sudo pacman -S ', yay: 'yay -S ', apt: 'sudo apt-get install ', dnf: 'sudo dnf install ' };
+        execCmd((cmds[pm] || 'sudo pacman -S ') + selectedText);
+        break;
+      }
       case 'ctx.search':
         if (window.vscode) window.vscode.postMessage({ type:'openExternal', url:'https://www.google.com/search?q='+encodeURIComponent(selectedText) });
         break;
@@ -1258,24 +1322,265 @@
     settings.accentColor = ''; saveSettings(); applyTheme();
     const el = $('accent-color'); if (el) el.value = '#58a6ff';
   });
-
-  // ── Bottom input ───────────────────────────────────────────────────────────
-  let lastInputVal = '';
-  const bottomInput = $('bottom-input');
-  bottomInput.addEventListener('input', e => {
-    if (lastInputVal.length > 0) sendToActive('\x15');
-    sendToActive(e.target.value);
-    lastInputVal = e.target.value;
+  $('package-manager').addEventListener('change', e => {
+    settings.packageManager = e.target.value; saveSettings();
   });
-  bottomInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { sendToActive('\r'); bottomInput.value = ''; lastInputVal = ''; }
-    else if (e.key === 'Tab') { e.preventDefault(); sendToActive('\t'); }
+
+  // ── Per-pane input bar ────────────────────────────────────────────────────
+  let tuiMode = false;
+
+  // Output capture: one-shot listeners for the next PTY output chunk
+  const _outputCaptures = new Map(); // sid → [callback, ...]
+
+  function onNextOutput(sid, cb) {
+    if (!_outputCaptures.has(sid)) _outputCaptures.set(sid, []);
+    _outputCaptures.get(sid).push(cb);
+  }
+
+  function setTuiMode(active) {
+    if (tuiMode === active) return;
+    tuiMode = active;
+    // Show/hide all pane bars
+    document.querySelectorAll('.pane-input-bar').forEach(bar => {
+      bar.style.display = (!active && settings.showInputBox) ? '' : 'none';
+    });
+  }
+
+  function updatePromptPath(cwd, sid) {
+    if (!settings.showInputBox) return;
+    document.querySelectorAll('.pane-input-bar').forEach(bar => {
+      if (!bar._setPath) return;
+      // If sid provided, only update the matching bar; otherwise update all
+      if (sid && bar._sid && bar._sid() !== sid) return;
+      bar._setPath(cwd);
+    });
+  }
+
+  // Build a single input bar and attach it to a pane container
+  function createPaneBar(container, getTerm, getSid) {
+    const bar = document.createElement('div');
+    bar.className = 'pane-input-bar';
+    bar.style.display = settings.showInputBox ? '' : 'none';
+
+    const prompt = document.createElement('span');
+    prompt.className = 'bar-prompt';
+    prompt.innerHTML =
+      '<span class="bar-user prompt-user"></span>' +
+      '<span class="prompt-sep">:</span>' +
+      '<span class="bar-path prompt-path">~</span>' +
+      '<span class="prompt-dollar">$&nbsp;</span>';
+
+    const inputWrapper = document.createElement('div');
+    inputWrapper.className = 'bar-input-wrapper';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'bottom-input bar-input';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('spellcheck', 'false');
+
+    const fakeCursor = document.createElement('span');
+    fakeCursor.className = 'bar-cursor';
+
+    inputWrapper.appendChild(input);
+    inputWrapper.appendChild(fakeCursor);
+
+    bar.appendChild(prompt);
+    bar.appendChild(inputWrapper);
+    container.appendChild(bar);
+
+    // Move fake cursor to match caret position
+    function updateFakeCursor() {
+      if (document.activeElement !== input) return;
+      try {
+        const pos  = input.selectionStart || 0;
+        const text = input.value.slice(0, pos);
+        // Measure text width using a temporary canvas
+        const canvas = updateFakeCursor._canvas || (updateFakeCursor._canvas = document.createElement('canvas'));
+        const ctx = canvas.getContext('2d');
+        ctx.font = `${settings.fontSize}px "JetBrains Mono", monospace`;
+        const w = ctx.measureText(text).width;
+        fakeCursor.style.left = w + 'px';
+      } catch(e) {}
+    }
+    input.addEventListener('keyup', updateFakeCursor);
+    input.addEventListener('click', updateFakeCursor);
+    input.addEventListener('input', () => { barText = input.value; updateFakeCursor(); });
+
+    // ── State ─────────────────────────────────────────────────────────────
+    let barText    = '';   // what the user has typed — sent only on Enter/Tab
+    let waitingTab = false; // true while waiting for shell's tab-complete response
+
+    // ── Path update (called by cwd watcher) ───────────────────────────────
+    bar._sid  = getSid;   // function — call to get current sid
+    bar._setPath = (cwd) => {
+      const el = bar.querySelector('.bar-path');
+      if (el) el.textContent = (cwd || '~').replace(/^\/root/, '~').replace(/^\/home\/[^/]+/, '~');
+    };
+    bar._setUser = (userhost) => {
+      const el = bar.querySelector('.bar-user');
+      if (el) el.textContent = userhost;
+    };
+    // Focus the bar's input
+    bar._focus = () => { setTimeout(() => input.focus(), 60); };
+
+    // ── Capture shell output from xterm buffer after PTY responds ────────
+    // ── Read current line from xterm buffer into bar ──────────────────────
+    function readBarTextFromBuffer() {
+      const term = getTerm();
+      if (!term) return;
+      try {
+        const buf  = term.buffer.active;
+        const line = buf.getLine(buf.cursorY);
+        if (!line) return;
+        const raw = line.translateToString(true);
+        let sep = -1;
+        for (let i = raw.length - 1; i >= 1; i--) {
+          if ((raw[i-1] === '$' || raw[i-1] === '#') && raw[i] === ' ') {
+            sep = i - 1; break;
+          }
+        }
+        if (sep >= 0) {
+          barText     = raw.slice(sep + 2).trimEnd();
+          input.value = barText;
+          updateFakeCursor();
+        }
+      } catch(e) {}
+    }
+
+    // ── Send to PTY via conn directly ─────────────────────────────────────
+    function sendToPty(data) {
+      const sid = getSid();
+      if (sid) conn.send({ type: 'input', id: sid, data });
+    }
+
+    // ── Always re-focus bar on mousedown in the pane ──────────────────────
+    container.addEventListener('mousedown', () => {
+      if (settings.showInputBox) setTimeout(() => input.focus(), 0);
+    });
+
+    // ── Position the bar over the xterm cursor ────────────────────────────
+    let rafId = null;
+
+    function positionBar() {
+      rafId = requestAnimationFrame(positionBar);
+      if (!settings.showInputBox || tuiMode) { bar.style.display = 'none'; return; }
+      const term = getTerm();
+      if (!term || !term.element) { bar.style.display = 'none'; return; }
+
+      const cursorEl = term.element.querySelector('.xterm-cursor-layer canvas')
+                    || term.element.querySelector('.xterm-cursor-layer .xterm-cursor')
+                    || term.element.querySelector('[class*="cursor"]');
+      const containerRect = container.getBoundingClientRect();
+      if (!containerRect.height) return;
+
+      let top, height;
+      if (cursorEl) {
+        const r = cursorEl.getBoundingClientRect();
+        top = r.top - containerRect.top;
+        height = r.height || (settings.fontSize * 1.2);
+      } else {
+        let cellH = settings.fontSize * 1.2;
+        try { cellH = term._core._renderService.dimensions.css.cell.height || cellH; } catch(e){}
+        top    = 6 + term.buffer.active.cursorY * cellH;
+        height = cellH;
+      }
+
+      bar.style.display  = '';
+      bar.style.top      = Math.round(top) + 'px';
+      bar.style.height   = Math.round(height) + 'px';
+      bar.style.fontSize = settings.fontSize + 'px';
+      input.style.fontSize = settings.fontSize + 'px';
+    }
+
+    function startBar() {
+      if (rafId) return;
+      setTimeout(() => { if (!rafId) rafId = requestAnimationFrame(positionBar); }, 300);
+    }
+    function stopBar() {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    }
+    startBar();
+
+    // ── Keyboard handling ─────────────────────────────────────────────────
+    input.addEventListener('keydown', e => {
+      if (waitingTab) { e.preventDefault(); return; }
+
+      if (e.ctrlKey && !e.shiftKey) {
+        const map = { c:'\x03', z:'\x1a', d:'\x04', l:'\x0c', u:'\x15', w:'\x17', r:'\x12' };
+        const ch = map[e.key.toLowerCase()];
+        if (ch) {
+          e.preventDefault();
+          if (ch === '\x03' || ch === '\x15') { barText = ''; input.value = ''; updateFakeCursor(); }
+          sendToPty(ch);
+          return;
+        }
+      }
+
+      switch (e.key) {
+        case 'Enter':
+          e.preventDefault();
+          sendToPty('\x15' + barText + '\r');
+          barText = ''; input.value = '';
+          updateFakeCursor();
+          break;
+
+        case 'Tab': {
+          e.preventDefault();
+          if (!barText) break;
+          waitingTab = true;
+          const sid = getSid();
+          sendToPty('\x15' + barText + '\t');
+          if (sid) {
+            onNextOutput(sid, () => {
+              setTimeout(() => { readBarTextFromBuffer(); waitingTab = false; }, 16);
+            });
+            setTimeout(() => { waitingTab = false; }, 800);
+          } else { waitingTab = false; }
+          break;
+        }
+
+        case 'ArrowUp': {
+          e.preventDefault();
+          const sid = getSid();
+          sendToPty('\x15\x1b[A');
+          if (sid) onNextOutput(sid, () => setTimeout(readBarTextFromBuffer, 16));
+          break;
+        }
+
+        case 'ArrowDown': {
+          e.preventDefault();
+          const sid = getSid();
+          sendToPty('\x15\x1b[B');
+          if (sid) onNextOutput(sid, () => setTimeout(readBarTextFromBuffer, 16));
+          break;
+        }
+
+        case 'Escape':
+          e.preventDefault();
+          barText = ''; input.value = '';
+          sendToPty('\x03');
+          updateFakeCursor();
+          break;
+
+        default:
+          break;
+      }
+    });
+
+    return { bar, input, startBar, stopBar };
+  }
+
+  $('show-input-box').addEventListener('change', e => {
+    settings.showInputBox = e.target.checked; saveSettings();
+    document.querySelectorAll('.pane-input-bar').forEach(bar => {
+      bar.style.display = e.target.checked ? '' : 'none';
+    });
   });
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   initSettingsUI();
   applyTheme();
-  if (settings.showInputBox) $('input-box-container').style.display = 'flex';
   if (settings.neverCollapseSidebar) {
     sidebarCollapsed = false;
     tabSidebar.classList.remove('collapsed');
