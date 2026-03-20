@@ -430,6 +430,8 @@
   function attachKeyGuard(el, getTermFn) {
     el.addEventListener('keydown', e => {
       if (!e.ctrlKey) return;
+      // Don't intercept when the user is focused on our input bar
+      if (document.activeElement?.classList.contains('bar-input')) return;
       if (e.shiftKey && e.key === 'C') {
         e.stopPropagation(); e.preventDefault();
         const t = getTermFn();
@@ -587,11 +589,15 @@
     setTimeout(() => {
       fitTab(tab);
       if (settings.showInputBox) {
+        // Try immediate bar focus first
         const bar = tab.wrapper?.querySelector('.pane-input-bar');
-        if (bar && bar._focus) { bar._focus(); return; }
+        if (bar?._focus) {
+          bar._focus();
+          return;
+        }
       }
       focusTab(tab);
-    }, 60);
+    }, 80);
   }
 
   // ── Split panes ────────────────────────────────────────────────────────────
@@ -616,9 +622,6 @@
     split.term.open(pane);
     const screen = pane.querySelector('.xterm-screen');
     if (screen) screen.addEventListener('mousedown', activatePane);
-
-    // Per-pane input bar
-    createPaneBar(pane, () => split.term, () => split.sid);
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'split-close-btn';
@@ -705,6 +708,10 @@
     if (tab.splits.length === 0) tab.splits.push({ term: tab.term, fa: tab.fa, sid: tab.sid, onOutputData: tab.onOutputData, cwd: tab.cwd });
     const { term, fa, sid, onOutputData } = makeTerm(tab.cwd);
     tab.splits.push({ term, fa, sid, onOutputData, cwd: tab.cwd });
+    // Hide bar — no bar in split view
+    if (tab.wrapper) {
+      tab.wrapper.querySelectorAll('.pane-input-bar').forEach(b => { b.style.display = 'none'; });
+    }
     tab.wrapper?.remove();
     tab.wrapper = null;
     switchTab(tab.id);
@@ -728,6 +735,13 @@
     tab.wrapper = null;
     focusedSplit = 0;
     switchTab(tab.id);
+    // After switching back to non-split, focus the bar if input box is on
+    if (settings.showInputBox) {
+      setTimeout(() => {
+        const bar = tab.wrapper?.querySelector('.pane-input-bar');
+        if (bar?._focus) bar._focus();
+      }, 200);
+    }
   }
 
   // ── Server messages ────────────────────────────────────────────────────────
@@ -778,17 +792,17 @@
           const raw  = line.translateToString(true);
           const sep  = Math.max(raw.lastIndexOf('$ '), raw.lastIndexOf('# '));
           if (sep < 0) return;
-          const promptStr  = raw.slice(0, sep);
-          const colonIdx   = promptStr.lastIndexOf(':');
-          const userhost   = colonIdx >= 0 ? promptStr.slice(0, colonIdx).trim() : promptStr.trim();
+          const promptStr = raw.slice(0, sep);
+          const colonIdx  = promptStr.lastIndexOf(':');
+          const userhost  = colonIdx >= 0 ? promptStr.slice(0, colonIdx).trim() : promptStr.trim();
           if (!userhost) return;
           _parsedUserHost.add(msg.id);
-          // Set user@host on every bar associated with this term
+          // Only update the bar whose sid matches this session
           document.querySelectorAll('.pane-input-bar').forEach(bar => {
-            if (bar._setUser) bar._setUser(userhost);
+            if (bar._setUser && bar._sid && bar._sid() === msg.id) bar._setUser(userhost);
           });
         } catch(e) {}
-      }, 100);
+      }, 400);
     }
 
     // Bell idle detection
@@ -1087,24 +1101,38 @@
 
       // ── webview/context menu actions ────────────────────────────────────
       case 'ctx.copy': {
-        // Get the live xterm selection at command time (not stale selectedText)
-        const tab0 = tabs.find(t => t.id === activeTabId);
-        const liveText = ((tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term)?.getSelection?.() || selectedText;
-        if (liveText && window.vscode) {
-          window.vscode.postMessage({ type: 'copyToClipboard', text: liveText });
+        const barInput = document.querySelector('.bar-input');
+        if (settings.showInputBox && barInput && barInput.selectionStart !== barInput.selectionEnd) {
+          // Copy selected text from bar
+          const sel = barInput.value.slice(barInput.selectionStart, barInput.selectionEnd);
+          if (window.vscode) window.vscode.postMessage({ type: 'copyToClipboard', text: sel });
+          else navigator.clipboard.writeText(sel).catch(() => {});
         } else {
-          navigator.clipboard.writeText(liveText).catch(()=>{});
+          const tab0 = tabs.find(t => t.id === activeTabId);
+          const liveText = ((tab0?.splits[focusedSplit]||tab0?.splits[0])?.term || tab0?.term)?.getSelection?.() || selectedText;
+          if (liveText && window.vscode) window.vscode.postMessage({ type: 'copyToClipboard', text: liveText });
+          else navigator.clipboard.writeText(liveText).catch(() => {});
         }
         break;
       }
       case 'ctx.paste': {
-        // Extension host pre-fetched the clipboard text and sent it with the command
         const pasteText = msg.text;
-        if (pasteText) {
-          const tab2 = tabs.find(t => t.id === activeTabId);
-          const sid2 = (tab2?.splits[focusedSplit]||tab2?.splits[0])?.sid || tab2?.sid;
-          if (sid2) conn.send({ type:'input', id:sid2, data:pasteText });
+        if (!pasteText) break;
+        if (settings.showInputBox) {
+          // Paste into the active bar input
+          const barInput = document.querySelector('.bar-input');
+          if (barInput) {
+            const pos = barInput.selectionStart || barInput.value.length;
+            barInput.value = barInput.value.slice(0, pos) + pasteText + barInput.value.slice(barInput.selectionEnd || pos);
+            barInput.selectionStart = barInput.selectionEnd = pos + pasteText.length;
+            barInput.dispatchEvent(new Event('input')); // sync barText
+            break;
+          }
         }
+        // Fallback: send to PTY
+        const tab2 = tabs.find(t => t.id === activeTabId);
+        const sid2 = (tab2?.splits[focusedSplit]||tab2?.splits[0])?.sid || tab2?.sid;
+        if (sid2) conn.send({ type:'input', id:sid2, data:pasteText });
         break;
       }
       case 'ctx.splitH': { const t2=tabs.find(t=>t.id===activeTabId); if(t2) splitTerminal(t2,'horizontal'); break; }
@@ -1133,7 +1161,22 @@
         break;
       // History context menu
       case 'ctx.histExecute':   runFromHistory(selectedHistCmd); break;
-      case 'ctx.histCopyInput': sendToActive(selectedHistCmd); break;
+      case 'ctx.histCopyInput':
+        if (settings.showInputBox) {
+          // Put command into the active bar's input field
+          const activeBar = document.querySelector('.pane-input-bar');
+          if (activeBar) {
+            const inp = activeBar.querySelector('.bar-input');
+            if (inp) {
+              inp.value = selectedHistCmd || '';
+              inp.dispatchEvent(new Event('input')); // sync barText
+              inp.focus();
+            }
+          }
+        } else {
+          sendToActive(selectedHistCmd);
+        }
+        break;
       case 'ctx.histCopy':
         if (selectedHistCmd && window.vscode) window.vscode.postMessage({ type: 'copyToClipboard', text: selectedHistCmd });
         else navigator.clipboard.writeText(selectedHistCmd || '').catch(()=>{});
@@ -1288,8 +1331,16 @@
   $('theme').addEventListener('change', e => { settings.theme = e.target.value; saveSettings(); applyTheme(); });
   $('show-input-box').addEventListener('change', e => {
     settings.showInputBox = e.target.checked; saveSettings();
-    $('input-box-container').style.display = e.target.checked ? 'flex' : 'none';
-    setTimeout(() => { const t=tabs.find(t=>t.id===activeTabId); if(t) fitTab(t); }, 60);
+    document.querySelectorAll('.pane-input-bar').forEach(bar => {
+      bar.style.display = e.target.checked ? '' : 'none';
+    });
+    if (e.target.checked) {
+      setTimeout(() => {
+        const tab = tabs.find(t => t.id === activeTabId);
+        const bar = tab?.wrapper?.querySelector('.pane-input-bar');
+        if (bar?._focus) bar._focus();
+      }, 100);
+    }
   });
   $('never-collapse-sidebar').addEventListener('change', e => {
     settings.neverCollapseSidebar = e.target.checked; saveSettings();
@@ -1391,11 +1442,12 @@
 
     // Move fake cursor to match caret position
     function updateFakeCursor() {
+      // Keep input wide enough for its content so the wrapper can scroll
+      input.style.width = Math.max(input.value.length + 2, 4) + 'ch';
       if (document.activeElement !== input) return;
       try {
         const pos  = input.selectionStart || 0;
         const text = input.value.slice(0, pos);
-        // Measure text width using a temporary canvas
         const canvas = updateFakeCursor._canvas || (updateFakeCursor._canvas = document.createElement('canvas'));
         const ctx = canvas.getContext('2d');
         ctx.font = `${settings.fontSize}px "JetBrains Mono", monospace`;
@@ -1408,11 +1460,13 @@
     input.addEventListener('input', () => { barText = input.value; updateFakeCursor(); });
 
     // ── State ─────────────────────────────────────────────────────────────
-    let barText    = '';   // what the user has typed — sent only on Enter/Tab
-    let waitingTab = false; // true while waiting for shell's tab-complete response
+    let barText    = '';
+    let waitingTab = false;
+    let historyIdx = -1;   // -1 = not navigating; 0 = most recent entry
+    let historyDraft = ''; // saved draft before arrow-up navigation
 
     // ── Path update (called by cwd watcher) ───────────────────────────────
-    bar._sid  = getSid;   // function — call to get current sid
+    bar._sid  = getSid;
     bar._setPath = (cwd) => {
       const el = bar.querySelector('.bar-path');
       if (el) el.textContent = (cwd || '~').replace(/^\/root/, '~').replace(/^\/home\/[^/]+/, '~');
@@ -1421,8 +1475,15 @@
       const el = bar.querySelector('.bar-user');
       if (el) el.textContent = userhost;
     };
-    // Focus the bar's input
-    bar._focus = () => { setTimeout(() => input.focus(), 60); };
+    bar._focus = () => { setTimeout(() => input.focus(), 150); };
+    // Set initial path immediately
+    const initCwd = getSid ? (() => {
+      const sid = getSid();
+      if (!sid) return null;
+      const t = tabs.find(tab => tab.sid === sid || tab.splits?.some(s => s.sid === sid));
+      return t?.splits?.find(s => s.sid === sid)?.cwd || t?.cwd || null;
+    })() : null;
+    if (initCwd) bar._setPath(initCwd);
 
     // ── Capture shell output from xterm buffer after PTY responds ────────
     // ── Read current line from xterm buffer into bar ──────────────────────
@@ -1464,7 +1525,11 @@
 
     function positionBar() {
       rafId = requestAnimationFrame(positionBar);
-      if (!settings.showInputBox || tuiMode) { bar.style.display = 'none'; return; }
+      // Never show bar in split view
+      const activeTab = tabs.find(t => t.id === activeTabId);
+      if (!settings.showInputBox || tuiMode || (activeTab && activeTab.splits.length > 0)) {
+        bar.style.display = 'none'; return;
+      }
       const term = getTerm();
       if (!term || !term.element) { bar.style.display = 'none'; return; }
 
@@ -1515,14 +1580,59 @@
           sendToPty(ch);
           return;
         }
+        // Ctrl+V paste into bar
+        if (e.key === 'v' && settings.ctrlVPaste) {
+          e.preventDefault();
+          navigator.clipboard.readText().then(txt => {
+            if (!txt) return;
+            const pos = input.selectionStart || input.value.length;
+            input.value = input.value.slice(0, pos) + txt + input.value.slice(input.selectionEnd || pos);
+            input.selectionStart = input.selectionEnd = pos + txt.length;
+            barText = input.value;
+            updateFakeCursor();
+          }).catch(() => {});
+          return;
+        }
+      }
+      // Ctrl+Shift+C — copy selection from bar
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        e.preventDefault(); e.stopPropagation();
+        const sel = input.value.slice(input.selectionStart, input.selectionEnd);
+        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        return;
+      }
+      // Ctrl+Shift+V — paste into bar
+      if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+        e.preventDefault(); e.stopPropagation();
+        navigator.clipboard.readText().then(txt => {
+          if (!txt) return;
+          const pos = input.selectionStart || input.value.length;
+          input.value = input.value.slice(0, pos) + txt + input.value.slice(input.selectionEnd || pos);
+          input.selectionStart = input.selectionEnd = pos + txt.length;
+          barText = input.value;
+          updateFakeCursor();
+        }).catch(() => {});
+        return;
       }
 
       switch (e.key) {
         case 'Enter':
           e.preventDefault();
-          sendToPty('\x15' + barText + '\r');
+          if (barText.trim()) {
+            // Only send real commands — avoids empty bash history entries
+            sendToPty('\x15' + barText + '\r');
+          }
           barText = ''; input.value = '';
+          historyIdx = -1; historyDraft = '';
           updateFakeCursor();
+          // Refresh history so the new command appears
+          setTimeout(() => {
+            const sid2 = getSid();
+            if (sid2) {
+              const tab2 = tabs.find(t => t.sid === sid2 || t.splits.some(s => s.sid === sid2));
+              conn.send({ type: 'getHistory', cwd: tab2?.cwd || currentCwd });
+            }
+          }, 500);
           break;
 
         case 'Tab': {
@@ -1532,27 +1642,58 @@
           const sid = getSid();
           sendToPty('\x15' + barText + '\t');
           if (sid) {
-            onNextOutput(sid, () => {
-              setTimeout(() => { readBarTextFromBuffer(); waitingTab = false; }, 16);
-            });
-            setTimeout(() => { waitingTab = false; }, 800);
+            let silenceTimer = null;
+            const onChunk = () => {
+              clearTimeout(silenceTimer);
+              // Re-register SYNCHRONOUSLY before starting the silence timer
+              // so we never miss a chunk that arrives during the timer
+              onNextOutput(sid, onChunk);
+              silenceTimer = setTimeout(() => {
+                // Remove our listener — we're done
+                const caps = _outputCaptures.get(sid);
+                if (caps) {
+                  const i = caps.indexOf(onChunk);
+                  if (i >= 0) caps.splice(i, 1);
+                  if (!caps.length) _outputCaptures.delete(sid);
+                }
+                readBarTextFromBuffer();
+                waitingTab = false;
+              }, 120);
+            };
+            onNextOutput(sid, onChunk);
+            setTimeout(() => { waitingTab = false; }, 2000); // safety
           } else { waitingTab = false; }
           break;
         }
 
         case 'ArrowUp': {
           e.preventDefault();
-          const sid = getSid();
-          sendToPty('\x15\x1b[A');
-          if (sid) onNextOutput(sid, () => setTimeout(readBarTextFromBuffer, 16));
+          if (!commandHistory.length) break;
+          if (historyIdx === -1) historyDraft = barText;
+          historyIdx = Math.min(historyIdx + 1, commandHistory.length - 1);
+          barText = commandHistory[historyIdx] || '';
+          input.value = barText;
+          requestAnimationFrame(() => {
+            input.selectionStart = input.selectionEnd = input.value.length;
+            updateFakeCursor();
+          });
           break;
         }
 
         case 'ArrowDown': {
           e.preventDefault();
-          const sid = getSid();
-          sendToPty('\x15\x1b[B');
-          if (sid) onNextOutput(sid, () => setTimeout(readBarTextFromBuffer, 16));
+          if (historyIdx <= 0) {
+            historyIdx = -1;
+            barText = historyDraft;
+          } else {
+            historyIdx--;
+            barText = commandHistory[historyIdx] || '';
+          }
+          input.value = barText;
+          requestAnimationFrame(() => {
+            input.selectionStart = input.selectionEnd = input.value.length;
+            updateFakeCursor();
+          });
           break;
         }
 
@@ -1570,13 +1711,6 @@
 
     return { bar, input, startBar, stopBar };
   }
-
-  $('show-input-box').addEventListener('change', e => {
-    settings.showInputBox = e.target.checked; saveSettings();
-    document.querySelectorAll('.pane-input-bar').forEach(bar => {
-      bar.style.display = e.target.checked ? '' : 'none';
-    });
-  });
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   initSettingsUI();

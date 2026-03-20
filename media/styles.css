@@ -366,13 +366,43 @@ body {
 /* ── Per-pane input bar — floats over cursor row inside each pane ─────────── */
 .pane-input-bar {
   position: absolute;
-  left: 6px; right: 6px;
+  left: 6px;
+  right: 20px;
   z-index: 20;
   display: flex;
   align-items: center;
   background: var(--ui-bg2);
   overflow: hidden;
   pointer-events: auto;
+}
+
+.bar-input-wrapper {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+/* Thin themed horizontal scrollbar for the input wrapper */
+.bar-input-wrapper::-webkit-scrollbar {
+  height: 2px;
+}
+.bar-input-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.bar-input-wrapper::-webkit-scrollbar-thumb {
+  background: var(--ui-border);
+  border-radius: 2px;
+}
+.bar-input-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-accent);
+}
+/* Firefox */
+.bar-input-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-border) transparent;
 }
 
 .bar-prompt {
@@ -388,17 +418,10 @@ body {
 .bar-prompt .prompt-path  { color: #58a6ff; }
 .bar-prompt .prompt-dollar { color: var(--ui-fg); }
 
-.bar-input-wrapper {
-  flex: 1;
-  position: relative;
-  height: 100%;
-  display: flex;
-  align-items: center;
-}
-
 .bar-input {
-  flex: 1;
-  width: 100%;
+  /* min-width forces the input to grow with content so wrapper can scroll */
+  min-width: 100%;
+  width: auto;
   height: 100%;
   border: none;
   outline: none;
@@ -408,7 +431,8 @@ body {
   line-height: 1;
   padding: 0;
   margin: 0;
-  caret-color: transparent; /* hide native caret — we draw our own */
+  white-space: nowrap;
+  caret-color: transparent;
   cursor: text;
 }
 
@@ -421,7 +445,7 @@ body {
   background: var(--ui-fg);
   opacity: 0.9;
   pointer-events: none;
-  animation: bar-blink 1s step-end infinite;
+  /* animation: bar-blink 1s step-end infinite; */
 }
 .pane-input-bar:not(:focus-within) .bar-cursor { display: none; }
 

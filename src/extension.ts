@@ -279,7 +279,7 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
           </div>
         </div>
         <div class="setting-group">
-          <label><input type="checkbox" id="show-input-box"> Bottom input box</label>
+          <label><input type="checkbox" id="show-input-box"> Experimental (fake) input box</label>
         </div>
         <div class="setting-group">
           <label><input type="checkbox" id="never-collapse-sidebar"> Never collapse tab sidebar</label>
