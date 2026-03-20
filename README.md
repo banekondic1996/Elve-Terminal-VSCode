@@ -4,6 +4,11 @@ A powerful terminal panel for Visual Studio Code — history panel, tabs, split 
 
 ![Elve Terminal demo](https://github.com/banekondic1996/Elve-Terminal-VSCode/blob/main/media/demo.gif?raw=true)
 
+**To do:**
+<pre>
+  -Improve text input response
+</pre>
+
 ---
 
 ## Features
