@@ -24,22 +24,22 @@
   }
 
   // ── WebSocket ──────────────────────────────────────────────────────────────
+  const TOKEN = window.ELVE_TOKEN || '';
+
   class Conn {
     constructor() {
       this.listeners = {};
       this.queue = [];
       this.ws = null;
-      this.open = false;
+      this.open = false;       // true only after authOk received
       this._connect();
     }
     _connect() {
       dbg('Connecting ws://127.0.0.1:' + WS_PORT + '...');
       this.ws = new WebSocket('ws://127.0.0.1:' + WS_PORT);
       this.ws.onopen = () => {
-        this.open = true;
-        dbg('Connected', 'ok');
-        this.queue.forEach(m => this.ws.send(m));
-        this.queue = [];
+        // Send auth token immediately — nothing else goes through until authOk
+        this.ws.send(JSON.stringify({ type: 'auth', token: TOKEN }));
       };
       this.ws.onclose = () => {
         this.open = false;
@@ -50,6 +50,13 @@
       this.ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+          if (msg.type === 'authOk') {
+            this.open = true;
+            dbg('Connected', 'ok');
+            this.queue.forEach(m => this.ws.send(m));
+            this.queue = [];
+            return;
+          }
           (this.listeners[msg.type] || []).forEach(fn => fn(msg));
         } catch(ex) { console.error('[Elve] parse error', ex); }
       };
@@ -148,6 +155,7 @@
     saturation: 100,
     showInputBox: false,
     neverCollapseSidebar: false,
+    sidebarWidth: 180,
     autoCollapseHistory: false,
     accentColor: '',          // '' = use theme default
     ctrlVPaste: false,
@@ -945,6 +953,40 @@
     setTimeout(() => { if (tab) { fitTab(tab); focusTab(tab); } }, 200);
   }
 
+  // ── Tab sidebar resize (only when pinned) ─────────────────────────────────
+  function applySidebarWidth(w) {
+    document.documentElement.style.setProperty('--sidebar-open', w + 'px');
+    const inner = $('tab-sidebar-inner');
+    if (inner) inner.style.width = w + 'px';
+  }
+
+  const sidebarResizeHandle = $('tab-sidebar-resize');
+  if (sidebarResizeHandle) {
+    sidebarResizeHandle.addEventListener('mousedown', e => {
+      if (!settings.neverCollapseSidebar) return; // only when pinned
+      e.preventDefault();
+      sidebarResizeHandle.classList.add('dragging');
+      const startX = e.clientX;
+      const startW = tabSidebar.getBoundingClientRect().width;
+      const onMove = ev => {
+        const newW = Math.max(120, Math.min(400, startW + (ev.clientX - startX)));
+        applySidebarWidth(newW);
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (tab) fitTab(tab);
+      };
+      const onUp = () => {
+        sidebarResizeHandle.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        // Persist the new width
+        settings.sidebarWidth = tabSidebar.getBoundingClientRect().width;
+        saveSettings();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
   // ── Host commands (from VSCode title bar buttons) ──────────────────────────
   window.addEventListener('message', e => {
     const msg = e.data;
@@ -1191,8 +1233,13 @@
       sidebarCollapsed = false;
       tabSidebar.classList.remove('collapsed');
       tabSidebar.classList.add('pinned');
+      applySidebarWidth(settings.sidebarWidth || 180);
     } else {
       tabSidebar.classList.remove('pinned');
+      // Reset to default CSS variable when unpinned
+      document.documentElement.style.setProperty('--sidebar-open', '180px');
+      const inner = $('tab-sidebar-inner');
+      if (inner) inner.style.width = '180px';
     }
     setTimeout(() => { const t=tabs.find(t=>t.id===activeTabId); if(t){fitTab(t);focusTab(t);} }, 200);
   });
@@ -1233,6 +1280,7 @@
     sidebarCollapsed = false;
     tabSidebar.classList.remove('collapsed');
     tabSidebar.classList.add('pinned');
+    applySidebarWidth(settings.sidebarWidth || 180);
   }
   if (settings.autoCollapseHistory) {
     historySidebar.classList.add('auto-collapse');

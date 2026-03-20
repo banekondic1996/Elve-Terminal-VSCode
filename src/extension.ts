@@ -161,8 +161,7 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
         await vscode.env.clipboard.writeText(msg.text);
       }
       // Bell armed/fired — handled silently (audio + terminal text only)
-     // Bell armed — show notification
-      if (msg.type === 'bellArmed') {
+       if (msg.type === 'bellArmed') {
         vscode.window.showInformationMessage('Elve: monitoring started — will beep when terminal goes idle.');
       }
       if (msg.type === 'bellFired') {
@@ -207,6 +206,7 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
 
     <!-- Left tab sidebar -->
     <div class="tab-sidebar" id="tab-sidebar">
+      <div class="tab-sidebar-resize-handle" id="tab-sidebar-resize"></div>
       <div class="tab-sidebar-inner" id="tab-sidebar-inner">
         <div class="tab-list" id="tabs-container"></div>
       </div>
@@ -351,6 +351,7 @@ class ElveTerminalPanelProvider implements vscode.WebviewViewProvider {
 <script nonce="${nonce}">
   window.ELVE_WS_PORT = ${wsPort};
   window.ELVE_INITIAL_CWD = ${JSON.stringify(initialCwd)};
+  window.ELVE_TOKEN = ${JSON.stringify(this.server.token)};
 </script>
 <script nonce="${nonce}" src="${uri('xterm.js')}"></script>
 <script nonce="${nonce}" src="${uri('xterm-addon-fit.js')}"></script>

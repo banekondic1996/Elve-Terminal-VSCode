@@ -59,6 +59,7 @@ function ensureBashrcHook(): void {
 
 export class TerminalServer {
   public port: number = 0;
+  public token: string = '';           // shared secret sent to the webview
   private wss: any = null;
   private sessions = new Map<string, Session>();
   /** Tracks last-seen byte size of ~/.bash_history per session id */
@@ -66,6 +67,10 @@ export class TerminalServer {
 
   async start(): Promise<void> {
     ensureBashrcHook();
+
+    // Generate a 32-byte random token — only the extension host and its
+    // own webview will ever know this value.
+    this.token = require('crypto').randomBytes(32).toString('hex');
 
     this.port = await this.freePort(37420);
 
@@ -77,7 +82,7 @@ export class TerminalServer {
         resolve();
       });
       this.wss.once('error', reject);
-      this.wss.on('connection', (ws: any) => this.onClient(ws));
+      this.wss.on('connection', (ws: any, req: any) => this.onClient(ws, req));
     });
   }
 
@@ -87,10 +92,40 @@ export class TerminalServer {
     try { this.wss?.close(); } catch(e){}
   }
 
-  private onClient(ws: any) {
+  private onClient(ws: any, req: any) {
+    // ── Layer 1: Origin header check ────────────────────────────────────────
+    // VS Code webview connections always originate from a vscode-webview:// URI.
+    // Any other origin (a browser tab, a script on a LAN machine that somehow
+    // reached 127.0.0.1) is rejected immediately before any data is read.
+    const origin: string = req?.headers?.origin || '';
+    if (!origin.startsWith('vscode-webview://')) {
+      console.warn(`[Elve] Rejected connection from unexpected origin: "${origin}"`);
+      ws.close(4001, 'Forbidden');
+      return;
+    }
+
+    // ── Layer 2: Token handshake ────────────────────────────────────────────
+    // The first message from the client MUST be { type:'auth', token:'...' }.
+    // Until it arrives (and matches), every other message is dropped.
+    let authenticated = false;
+
     ws.on('message', (raw: Buffer) => {
-      try { this.handle(ws, JSON.parse(raw.toString())); }
-      catch(e) { console.error('[Elve] bad message', e); }
+      try {
+        const msg = JSON.parse(raw.toString());
+
+        if (!authenticated) {
+          if (msg.type === 'auth' && msg.token === this.token) {
+            authenticated = true;
+            this.send(ws, { type: 'authOk' });
+          } else {
+            console.warn('[Elve] Auth failed — closing connection');
+            ws.close(4003, 'Unauthorized');
+          }
+          return;
+        }
+
+        this.handle(ws, msg);
+      } catch(e) { console.error('[Elve] bad message', e); }
     });
     ws.on('close', () => {});
     ws.on('error', (e: Error) => console.error('[Elve] ws client error', e));

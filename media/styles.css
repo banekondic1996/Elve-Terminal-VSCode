@@ -168,6 +168,21 @@ body {
   opacity: 1;
 }
 
+/* Resize grip on right edge of tab-sidebar — only active when pinned */
+.tab-sidebar-resize-handle {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  z-index: 40;
+  transition: background 0.15s;
+}
+.tab-sidebar-resize-handle:hover,
+.tab-sidebar-resize-handle.dragging {
+  background: var(--ui-accent);
+  opacity: 0.6;
+}
+
 /* Drag-resize grip on the left edge */
 .panel-resize-handle {
   position: absolute; top:0; left:0; bottom:0; width:5px;
